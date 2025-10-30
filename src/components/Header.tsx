@@ -76,7 +76,7 @@ export default function Header() {
                 <div className="flex-1">
                   <Link href="/" className="flex items-center gap-2 text-lg font-semibold mb-4 border-b pb-4">
                       <Image src="/logo.png" alt="Content Operations Logo" width="35" height="35" />
-                      <span>Project Hub</span>
+                      <span>10MS OPS PMS</span>
                   </Link>
                   <nav className="grid gap-6 text-lg font-medium mt-8">
                     {linksToShow.map((link) => (
