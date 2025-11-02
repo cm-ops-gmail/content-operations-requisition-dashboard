@@ -230,7 +230,7 @@ export default function AllTicketsPage() {
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="Open">Open</SelectItem>
+                                                <SelectItem value="Open">Pending</SelectItem>
                                                 <SelectItem value="In Progress">In Progress</SelectItem>
                                                 <SelectItem value="Done">Done</SelectItem>
                                             </SelectContent>
