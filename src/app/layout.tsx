@@ -5,7 +5,7 @@ import Header from '@/components/Header';
 import { AuthProvider } from '@/hooks/use-auth';
 
 export const metadata: Metadata = {
-  title: 'Project Hub',
+  title: 'Content OPS Project and Ticket Management System',
   description: 'Project and Ticket Management System',
 };
 
