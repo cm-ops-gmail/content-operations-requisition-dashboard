@@ -38,6 +38,7 @@ export default function AdminPage() {
   const [newQuestionType, setNewQuestionType] = useState<FormQuestion['questionType']>('Text');
   const [isQuestionRequired, setIsQuestionRequired] = useState(false);
   const [checkboxOptions, setCheckboxOptions] = useState('');
+  const [selectOptions, setSelectOptions] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
   
   const { toast } = useToast();
@@ -90,15 +91,26 @@ export default function AdminPage() {
   const handleOpenQuestionDialog = (question: FormQuestion | null = null) => {
     setEditingQuestion(question);
     if (question) {
-        setNewQuestionText(question.questionText.replace(/\*$/, '').replace(/\s\(.*\)/, ''));
+        const cleanText = question.questionText.replace(/\*$/, '').replace(/\s\((select:|checkbox:).*?\)/i, '');
+        setNewQuestionText(cleanText);
         setNewQuestionType(question.questionType);
         setIsQuestionRequired(question.questionText.endsWith('*'));
-        setCheckboxOptions(question.options?.join(', ') || '');
+        if (question.questionType === 'Checkbox') {
+          setCheckboxOptions(question.options?.join('; ') || '');
+          setSelectOptions('');
+        } else if (question.questionType === 'Select') {
+          setSelectOptions(question.options?.join('; ') || '');
+          setCheckboxOptions('');
+        } else {
+          setCheckboxOptions('');
+          setSelectOptions('');
+        }
     } else {
         setNewQuestionText('');
         setNewQuestionType('Text');
         setIsQuestionRequired(false);
         setCheckboxOptions('');
+        setSelectOptions('');
     }
     setIsQuestionDialogOpen(true);
   }
@@ -109,13 +121,17 @@ export default function AdminPage() {
     
     let finalQuestionText = newQuestionText;
     
-    let typeHint = '';
-    if (newQuestionType === 'Select') typeHint = ' (Select)';
-    if (newQuestionType === 'Checkbox') {
-      const options = checkboxOptions.split(',').map(o => o.trim()).filter(Boolean);
-      typeHint = ` (Checkbox: ${options.join(';')})`;
+    if (newQuestionType === 'Select') {
+      const options = selectOptions.split(';').map(o => o.trim()).filter(Boolean);
+      if (options.length > 0) {
+        finalQuestionText += ` (Select: ${options.join(';')})`;
+      }
+    } else if (newQuestionType === 'Checkbox') {
+      const options = checkboxOptions.split(';').map(o => o.trim()).filter(Boolean);
+      if (options.length > 0) {
+        finalQuestionText += ` (Checkbox: ${options.join(';')})`;
+      }
     }
-    finalQuestionText += typeHint;
     
     if (isQuestionRequired) {
         finalQuestionText += '*';
@@ -235,15 +251,15 @@ export default function AdminPage() {
                       Add New Question
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="sm:max-w-[480px]">
                     <DialogHeader>
                       <DialogTitle>{editingQuestion ? 'Edit' : 'Add New'} Form Question for {selectedTeam}</DialogTitle>
                       <DialogDescription>
-                        This will {editingQuestion ? 'modify an entry in' : 'add a new row to'} the 'FormQuestions' sheet in your Google Sheet.
+                        This will {editingQuestion ? 'modify an entry in' : 'add a new row to'} the 'FormQuestions' sheet.
                       </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleQuestionFormSubmit}>
-                      <div className="py-4 space-y-4">
+                      <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto pr-4">
                         <div>
                           <Label htmlFor="new-question-text">Question Text</Label>
                           <Input
@@ -253,7 +269,7 @@ export default function AdminPage() {
                             placeholder="e.g., Contact Number"
                           />
                         </div>
-                          <div>
+                        <div>
                           <Label htmlFor="new-question-type">Question Type</Label>
                             <Select value={newQuestionType} onValueChange={(value) => setNewQuestionType(value as FormQuestion['questionType'])}>
                               <SelectTrigger id="new-question-type">
@@ -262,34 +278,46 @@ export default function AdminPage() {
                               <SelectContent>
                                   <SelectItem value="Text">Text</SelectItem>
                                   <SelectItem value="Textarea">Textarea</SelectItem>
-                                  <SelectItem value="Select">Select (Options managed in sheet)</SelectItem>
-                                  <SelectItem value="Checkbox">Checkbox (Options defined here)</SelectItem>
+                                  <SelectItem value="Select">Select (Dropdown)</SelectItem>
+                                  <SelectItem value="Checkbox">Checkbox</SelectItem>
                                   <SelectItem value="Date">Date</SelectItem>
                                   <SelectItem value="Url">URL</SelectItem>
                               </SelectContent>
                           </Select>
-                          <p className="text-xs text-muted-foreground mt-1">For 'Select', add options in a new sheet named after the question.</p>
                         </div>
-                          {newQuestionType === 'Checkbox' && (
+                        {newQuestionType === 'Select' && (
                             <div>
-                              <Label htmlFor="checkbox-options">Checkbox Options</Label>
-                              <Textarea 
-                                  id="checkbox-options"
-                                  value={checkboxOptions}
-                                  onChange={(e) => setCheckboxOptions(e.target.value)}
-                                  placeholder="Enter comma-separated options, e.g., Option A, Option B"
-                              />
+                                <Label htmlFor="select-options">Dropdown Options</Label>
+                                <Textarea 
+                                    id="select-options"
+                                    value={selectOptions}
+                                    onChange={(e) => setSelectOptions(e.target.value)}
+                                    placeholder="Enter semicolon-separated options, e.g., Option A; Option B"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">Options for the dropdown menu.</p>
                             </div>
-                          )}
-                          <div className="flex items-center space-x-2">
-                              <Checkbox id="is-required" checked={isQuestionRequired} onCheckedChange={(checked) => setIsQuestionRequired(Boolean(checked))} />
-                              <label
-                                  htmlFor="is-required"
-                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                              >
-                                  Make this question required
-                              </label>
+                        )}
+                        {newQuestionType === 'Checkbox' && (
+                          <div>
+                            <Label htmlFor="checkbox-options">Checkbox Options</Label>
+                            <Textarea 
+                                id="checkbox-options"
+                                value={checkboxOptions}
+                                onChange={(e) => setCheckboxOptions(e.target.value)}
+                                placeholder="Enter semicolon-separated options, e.g., Option A; Option B"
+                            />
+                             <p className="text-xs text-muted-foreground mt-1">Options for the checkbox group.</p>
                           </div>
+                        )}
+                        <div className="flex items-center space-x-2">
+                            <Checkbox id="is-required" checked={isQuestionRequired} onCheckedChange={(checked) => setIsQuestionRequired(Boolean(checked))} />
+                            <label
+                                htmlFor="is-required"
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                                Make this question required
+                            </label>
+                        </div>
                       </div>
                       <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsQuestionDialogOpen(false)}>Cancel</Button>
@@ -354,7 +382,7 @@ export default function AdminPage() {
               <TableBody>
                 {formQuestions.map((question) => (
                   <TableRow key={question.id}>
-                    <TableCell className="font-medium">{question.questionText.replace(/\*$/, '').replace(/\s\(.*\)/, '')}</TableCell>
+                    <TableCell className="font-medium">{question.questionText.replace(/\*$/, '').replace(/\s\((select:|checkbox:).*?\)/i, '')}</TableCell>
                     <TableCell>{question.questionType}</TableCell>
                     <TableCell>{question.questionText.endsWith('*') ? 'Yes' : 'No'}</TableCell>
                     <TableCell className="text-right">
@@ -398,5 +426,4 @@ export default function AdminPage() {
     </>
   );
 }
-
     
