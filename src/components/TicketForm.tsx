@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
 // Component to render the correct form field based on question type
-const FormFieldBuilder = ({ question, form, team }: { question: FormQuestion, form: UseFormReturn<any>, team: string }) => {
+const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: UseFormReturn<any> }) => {
     const isRequired = question.questionText.endsWith('*');
     const label = question.questionText.replace(/\*$/, '').replace(/\s\((select:|checkbox:).*?\)/i, '');
     
@@ -42,7 +42,7 @@ const FormFieldBuilder = ({ question, form, team }: { question: FormQuestion, fo
                                 <Input 
                                   placeholder={`Enter ${label.toLowerCase()}`} 
                                   type={question.questionType === 'Url' ? 'url' : 'text'}
-                                  {...field} 
+                                  {...field}
                                 />
                             </FormControl>
                             <FormMessage />
@@ -83,9 +83,6 @@ const FormFieldBuilder = ({ question, form, team }: { question: FormQuestion, fo
                                         mode="single"
                                         selected={field.value}
                                         onSelect={field.onChange}
-                                        disabled={(date) =>
-                                            date > new Date() || date < new Date("1900-01-01")
-                                        }
                                         initialFocus
                                     />
                                 </PopoverContent>
@@ -179,105 +176,85 @@ const FormFieldBuilder = ({ question, form, team }: { question: FormQuestion, fo
     return fieldComponent;
 };
 
-export function TicketForm({ teams, workType }: { teams: string[]; workType: string; }) {
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [formQuestions, setFormQuestions] = useState<FormQuestion[]>([]);
-    const { toast } = useToast();
-    
-    // Dynamically generate the form schema from questions
-    const formSchema = z.object({
-        Team: z.string(),
+// Function to generate the Zod schema and default values dynamically
+const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[], workType: string) => {
+    const schemaDefinition: Record<string, any> = {
+        'Team': z.string(),
         'Work Type': z.string(),
-        ...formQuestions.reduce((schema, q) => {
-            const isRequired = q.questionText.endsWith('*');
-            const questionKey = q.questionText;
+    };
 
-            if (q.questionType === 'Checkbox') {
-                const checkboxGroupSchema = z.object(
-                  (q.options || []).reduce((acc, option) => {
+    const defaultValues: Record<string, any> = {
+        'Team': teams.join(', '),
+        'Work Type': workType,
+    };
+
+    questions.forEach(q => {
+        const isRequired = q.questionText.endsWith('*');
+        const questionKey = q.questionText;
+
+        if (q.questionType === 'Checkbox') {
+            const checkboxOptions = q.options || [];
+            const checkboxSchema = z.object(
+                checkboxOptions.reduce((acc, option) => {
                     acc[option] = z.boolean().default(false);
                     return acc;
-                  }, {} as Record<string, z.ZodBoolean>)
-                );
-                schema[questionKey] = isRequired ? checkboxGroupSchema.refine(data => Object.values(data).some(v => v), { message: "At least one option must be selected."}) : checkboxGroupSchema;
-            } else if (q.questionType === 'Date') {
-                 schema[questionKey] = isRequired ? z.date({ required_error: "A date is required."}) : z.date().optional();
-            } else {
-                 schema[questionKey] = isRequired ? z.string().min(1, 'This field is required.') : z.string().optional();
-            }
-            return schema;
-        }, {} as Record<string, any>)
+                }, {} as Record<string, z.ZodBoolean>)
+            );
+            
+            schemaDefinition[questionKey] = isRequired 
+                ? checkboxSchema.refine(data => Object.values(data).some(v => v), { message: "At least one option must be selected." }) 
+                : checkboxSchema;
+
+            defaultValues[questionKey] = checkboxOptions.reduce((acc, option) => {
+                acc[option] = false;
+                return acc;
+            }, {} as Record<string, boolean>);
+
+        } else if (q.questionType === 'Date') {
+            schemaDefinition[questionKey] = isRequired 
+                ? z.date({ required_error: "A date is required."}) 
+                : z.date().optional().nullable();
+            defaultValues[questionKey] = null;
+        } else {
+            schemaDefinition[questionKey] = isRequired 
+                ? z.string().min(1, 'This field is required.') 
+                : z.string().optional();
+            defaultValues[questionKey] = '';
+        }
     });
 
+    return {
+        schema: z.object(schemaDefinition),
+        defaultValues,
+    };
+};
+
+function ActualForm({ formSchema, defaultValues, formQuestions }: {
+    formSchema: z.ZodObject<any, any, any>,
+    defaultValues: Record<string, any>,
+    formQuestions: FormQuestion[],
+}) {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { toast } = useToast();
+    
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
-        defaultValues: {
-            Team: teams.join(', '),
-            'Work Type': workType,
-        },
+        defaultValues: defaultValues,
     });
-    
-    useEffect(() => {
-        if (!teams || teams.length === 0) {
-            setFormQuestions([]);
-            setIsLoading(false);
-            return;
-        };
-        
-        setIsLoading(true);
-
-        const fetchAllQuestions = async () => {
-            const allQuestions = await Promise.all(
-                teams.map(team => getFormQuestions(team))
-            );
-            const flattenedQuestions = allQuestions.flat();
-            
-            // Remove duplicates by questionText
-            const uniqueQuestions = flattenedQuestions.filter((question, index, self) =>
-                index === self.findIndex((q) => (
-                    q.questionText === question.questionText
-                ))
-            );
-
-            setFormQuestions(uniqueQuestions);
-
-            const defaultValues = uniqueQuestions.reduce((acc, q) => {
-                const questionKey = q.questionText;
-                if (q.questionType === 'Checkbox') {
-                     acc[questionKey] = (q.options || []).reduce((optionsAcc, option) => {
-                        optionsAcc[option] = false;
-                        return optionsAcc;
-                    }, {} as Record<string, boolean>);
-                } else if (q.questionType !== 'Date') {
-                    acc[questionKey] = '';
-                }
-                return acc;
-            }, {} as Record<string, any>);
-            
-            form.reset({ Team: teams.join(', '), 'Work Type': workType, ...defaultValues });
-            setIsLoading(false);
-        };
-        
-        fetchAllQuestions();
-    }, [teams, workType]);
-
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true);
 
-        const processedValues: Record<string, any> = { ...values, Team: teams.join(', ') };
+        const processedValues: Record<string, any> = { ...values };
         
         formQuestions.forEach(q => {
             const value = processedValues[q.questionText];
-            // Convert checkbox group data to a comma-separated string for submission
             if (q.questionType === 'Checkbox' && value) {
                 processedValues[q.questionText] = Object.entries(value)
                     .filter(([, checked]) => checked)
                     .map(([option]) => option)
                     .join(', ');
             }
-            // Format date objects to a string
             if (q.questionType === 'Date' && value instanceof Date) {
                  processedValues[q.questionText] = format(value, 'yyyy-MM-dd');
             }
@@ -290,17 +267,7 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
                 title: 'Ticket Submitted!',
                 description: 'Your ticket has been submitted successfully.',
             });
-            const defaultQuestionValues = formQuestions.reduce((acc, q) => {
-                if (q.questionType === 'Checkbox') {
-                    acc[q.questionText] = {};
-                } else if (q.questionType !== 'Date') {
-                    acc[q.questionText] = '';
-                } else {
-                    acc[q.questionText] = undefined;
-                }
-                return acc;
-            }, {} as Record<string, any>);
-            form.reset({ Team: teams.join(', '), 'Work Type': workType, ...defaultQuestionValues });
+            form.reset(defaultValues);
         } else {
             toast({
                 variant: 'destructive',
@@ -310,22 +277,14 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
         }
         setIsSubmitting(false);
     }
-
-    if (isLoading) {
-        return <div className="flex justify-center items-center p-8"><Loader2 className="mr-2 h-8 w-8 animate-spin" /> Loading form...</div>
-    }
-
-    if (formQuestions.length === 0 && !isLoading) {
-        return <p className="text-center text-muted-foreground">No form questions have been configured for the selected team(s).</p>
-    }
-
+    
     return (
         <Card>
             <CardContent className="p-6">
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                         {formQuestions.map(question => (
-                            <FormFieldBuilder key={question.id} question={question} form={form} team={teams[0]} />
+                            <FormFieldBuilder key={question.id} question={question} form={form} />
                         ))}
                         <Button type="submit" disabled={isSubmitting} className="w-full">
                             {isSubmitting ? (
@@ -339,4 +298,71 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
             </CardContent>
         </Card>
     );
+}
+
+export function TicketForm({ teams, workType }: { teams: string[]; workType: string; }) {
+    const [isLoading, setIsLoading] = useState(true);
+    const [formConfig, setFormConfig] = useState<{
+        formSchema: z.ZodObject<any, any, any>,
+        defaultValues: Record<string, any>,
+        formQuestions: FormQuestion[],
+    } | null>(null);
+
+    const { toast } = useToast();
+    
+    useEffect(() => {
+        const fetchAndBuildConfig = async () => {
+            if (!teams || teams.length === 0) {
+                setFormConfig(null);
+                setIsLoading(false);
+                return;
+            };
+            
+            setIsLoading(true);
+
+            try {
+                const allQuestionsPromises = teams.map(team => getFormQuestions(team));
+                const allQuestions = await Promise.all(allQuestionsPromises);
+                const flattenedQuestions = allQuestions.flat();
+                
+                const uniqueQuestions = flattenedQuestions.filter((question, index, self) =>
+                    index === self.findIndex((q) => q.questionText === question.questionText)
+                );
+    
+                const { schema, defaultValues } = generateFormSchemaAndDefaults(uniqueQuestions, teams, workType);
+                
+                setFormConfig({
+                    formSchema: schema,
+                    defaultValues,
+                    formQuestions: uniqueQuestions
+                });
+
+            } catch (error) {
+                console.error("Failed to fetch form questions:", error);
+                toast({ variant: "destructive", title: "Error", description: "Could not load form questions." });
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        
+        fetchAndBuildConfig();
+    }, [teams, workType, toast]); 
+
+
+    if (isLoading) {
+        return <div className="flex justify-center items-center p-8"><Loader2 className="mr-2 h-8 w-8 animate-spin" /> Loading form...</div>
+    }
+
+    if (!formConfig && !isLoading) {
+         if (teams.length > 0) {
+            return <p className="text-center text-muted-foreground">No form questions have been configured for the selected team(s).</p>
+         }
+         return null; // Don't render anything if no teams are selected
+    }
+    
+    if (formConfig) {
+        return <ActualForm key={teams.join('-')} {...formConfig} />;
+    }
+
+    return null;
 }
