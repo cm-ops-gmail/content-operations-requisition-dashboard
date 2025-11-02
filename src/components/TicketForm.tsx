@@ -12,40 +12,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { submitTicket, getFormQuestions } from '@/app/actions';
-import { getSheetData } from '@/lib/google-sheets';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CalendarIcon } from 'lucide-react';
 import type { FormQuestion } from '@/lib/mock-data';
 import { Checkbox } from './ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Calendar } from './ui/calendar';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
 
 // Component to render the correct form field based on question type
 const FormFieldBuilder = ({ question, form, team }: { question: FormQuestion, form: UseFormReturn<any>, team: string }) => {
     const isRequired = question.questionText.endsWith('*');
-    const label = question.questionText.replace(/\*$/, '').replace(/\s\(.*\)/, '');
-    const [selectOptions, setSelectOptions] = useState<string[]>([]);
-
-     useEffect(() => {
-        if (question.questionType === 'Select') {
-            // Sheet name is derived from the question label itself.
-            const sheetName = label;
-            getSheetData(sheetName)
-                .then(data => {
-                    if (data && data.values) {
-                        // Assuming options are in the first column of the specified sheet
-                        const options = data.values.flat().filter(Boolean);
-                        setSelectOptions(options);
-                    }
-                })
-                .catch(err => console.error(`Failed to fetch options for ${sheetName}:`, err));
-        }
-    }, [question.questionType, label]);
+    const label = question.questionText.replace(/\*$/, '').replace(/\s\((select:|checkbox:).*?\)/i, '');
     
     let fieldComponent;
 
     switch (question.questionType) {
         case 'Text':
         case 'Url':
-        case 'Date':
             fieldComponent = (
                 <FormField
                     control={form.control}
@@ -56,10 +41,55 @@ const FormFieldBuilder = ({ question, form, team }: { question: FormQuestion, fo
                             <FormControl>
                                 <Input 
                                   placeholder={`Enter ${label.toLowerCase()}`} 
-                                  type={question.questionType === 'Url' ? 'url' : question.questionType === 'Date' ? 'date' : 'text'}
+                                  type={question.questionType === 'Url' ? 'url' : 'text'}
                                   {...field} 
                                 />
                             </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            );
+            break;
+        case 'Date':
+             fieldComponent = (
+                <FormField
+                    control={form.control}
+                    name={question.questionText}
+                    render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                            <FormLabel>{label}{isRequired && ' *'}</FormLabel>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <FormControl>
+                                        <Button
+                                            variant={"outline"}
+                                            className={cn(
+                                                "w-full pl-3 text-left font-normal",
+                                                !field.value && "text-muted-foreground"
+                                            )}
+                                        >
+                                            {field.value ? (
+                                                format(field.value, "PPP")
+                                            ) : (
+                                                <span>Pick a date</span>
+                                            )}
+                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                        </Button>
+                                    </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                        mode="single"
+                                        selected={field.value}
+                                        onSelect={field.onChange}
+                                        disabled={(date) =>
+                                            date > new Date() || date < new Date("1900-01-01")
+                                        }
+                                        initialFocus
+                                    />
+                                </PopoverContent>
+                            </Popover>
                             <FormMessage />
                         </FormItem>
                     )}
@@ -98,7 +128,7 @@ const FormFieldBuilder = ({ question, form, team }: { question: FormQuestion, fo
                                     </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                    {selectOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                                    {question.options?.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                             <FormMessage />
@@ -171,7 +201,8 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
                   }, {} as Record<string, z.ZodBoolean>)
                 );
                 schema[questionKey] = isRequired ? checkboxGroupSchema.refine(data => Object.values(data).some(v => v), { message: "At least one option must be selected."}) : checkboxGroupSchema;
-
+            } else if (q.questionType === 'Date') {
+                 schema[questionKey] = isRequired ? z.date({ required_error: "A date is required."}) : z.date().optional();
             } else {
                  schema[questionKey] = isRequired ? z.string().min(1, 'This field is required.') : z.string().optional();
             }
@@ -218,7 +249,7 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
                         optionsAcc[option] = false;
                         return optionsAcc;
                     }, {} as Record<string, boolean>);
-                } else {
+                } else if (q.questionType !== 'Date') {
                     acc[questionKey] = '';
                 }
                 return acc;
@@ -229,20 +260,26 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
         };
         
         fetchAllQuestions();
-    }, [teams, workType, form]);
+    }, [teams, workType]);
 
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true);
 
         const processedValues: Record<string, any> = { ...values, Team: teams.join(', ') };
-        // Convert checkbox group data to a comma-separated string for submission
+        
         formQuestions.forEach(q => {
-            if (q.questionType === 'Checkbox' && processedValues[q.questionText]) {
-                processedValues[q.questionText] = Object.entries(processedValues[q.questionText])
+            const value = processedValues[q.questionText];
+            // Convert checkbox group data to a comma-separated string for submission
+            if (q.questionType === 'Checkbox' && value) {
+                processedValues[q.questionText] = Object.entries(value)
                     .filter(([, checked]) => checked)
                     .map(([option]) => option)
                     .join(', ');
+            }
+            // Format date objects to a string
+            if (q.questionType === 'Date' && value instanceof Date) {
+                 processedValues[q.questionText] = format(value, 'yyyy-MM-dd');
             }
         });
 
@@ -256,8 +293,10 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
             const defaultQuestionValues = formQuestions.reduce((acc, q) => {
                 if (q.questionType === 'Checkbox') {
                     acc[q.questionText] = {};
-                } else {
+                } else if (q.questionType !== 'Date') {
                     acc[q.questionText] = '';
+                } else {
+                    acc[q.questionText] = undefined;
                 }
                 return acc;
             }, {} as Record<string, any>);
