@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -15,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface DashboardClientProps {
     tickets: string[][];
@@ -179,6 +179,14 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
     </Popover>
   );
 
+  const truncateHeader = (header: string, wordLimit: number) => {
+    const words = header.split(' ');
+    if (words.length > wordLimit) {
+      return words.slice(0, wordLimit).join(' ') + '...';
+    }
+    return header;
+  };
+
   return (
     <>
       <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
@@ -274,7 +282,20 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
             <Table>
               <TableHeader>
                 <TableRow>
-                  {headers.map((header) => <TableHead key={header}>{header}</TableHead>)}
+                    <TooltipProvider>
+                    {headers.map((header) => (
+                      <TableHead key={header}>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <span className="block truncate">{truncateHeader(header, 15)}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>{header}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                      </TableHead>
+                    ))}
+                    </TooltipProvider>
                 </TableRow>
               </TableHeader>
               <TableBody>
