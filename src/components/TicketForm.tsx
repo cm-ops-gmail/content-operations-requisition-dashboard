@@ -28,6 +28,10 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
     
     let fieldComponent;
 
+    const otherValue = form.watch(question.questionText) === 'Other';
+    const otherCheckboxValue = form.watch(`${question.questionText}.Other`);
+    const otherFieldName = `${question.questionText}_other`;
+    
     switch (question.questionType) {
         case 'Text':
         case 'Url':
@@ -112,6 +116,7 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
             break;
         case 'Select':
             fieldComponent = (
+                <>
                 <FormField
                     control={form.control}
                     name={question.questionText}
@@ -132,42 +137,86 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
                         </FormItem>
                     )}
                 />
+                {question.options?.includes('Other') && otherValue && (
+                     <FormField
+                        control={form.control}
+                        name={otherFieldName}
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormControl>
+                                    <Input placeholder="Please specify" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                )}
+                </>
             );
             break;
         case 'Checkbox':
             fieldComponent = (
-                <FormField
-                    control={form.control}
-                    name={question.questionText}
-                    render={() => (
-                         <FormItem>
-                           <div className="mb-4">
-                            <FormLabel>{label}{isRequired && ' *'}</FormLabel>
-                           </div>
-                           {question.options?.map((option) => (
-                             <FormField
-                               key={option}
-                               control={form.control}
-                               name={`${question.questionText}.${option}`}
-                               render={({ field }) => (
-                                 <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                   <FormControl>
-                                     <Checkbox
-                                       checked={field.value}
-                                       onCheckedChange={field.onChange}
-                                     />
-                                   </FormControl>
-                                   <FormLabel className="font-normal">
-                                     {option}
-                                   </FormLabel>
-                                 </FormItem>
-                               )}
+                 <FormItem>
+                   <div className="mb-4">
+                    <FormLabel>{label}{isRequired && ' *'}</FormLabel>
+                   </div>
+                   {question.options?.map((option) => {
+                    if (option === 'Other') return null; // Render 'Other' separately
+                    return (
+                     <FormField
+                       key={option}
+                       control={form.control}
+                       name={`${question.questionText}.${option}`}
+                       render={({ field }) => (
+                         <FormItem className="flex flex-row items-start space-x-3 space-y-0 mb-2">
+                           <FormControl>
+                             <Checkbox
+                               checked={field.value}
+                               onCheckedChange={field.onChange}
                              />
-                           ))}
-                           <FormMessage />
+                           </FormControl>
+                           <FormLabel className="font-normal">
+                             {option}
+                           </FormLabel>
                          </FormItem>
+                       )}
+                     />
+                   )})}
+                    {question.options?.includes('Other') && (
+                        <div className="mt-2">
+                            <FormField
+                                key="Other"
+                                control={form.control}
+                                name={`${question.questionText}.Other`}
+                                render={({ field }) => (
+                                <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                                    <FormControl>
+                                        <Checkbox
+                                            checked={field.value}
+                                            onCheckedChange={field.onChange}
+                                        />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">
+                                        Other:
+                                    </FormLabel>
+                                     {otherCheckboxValue && (
+                                        <FormField
+                                            control={form.control}
+                                            name={otherFieldName}
+                                            render={({ field: otherField }) => (
+                                                <FormControl>
+                                                    <Input className="h-8" placeholder="Please specify" {...otherField} />
+                                                </FormControl>
+                                            )}
+                                        />
+                                     )}
+                                </FormItem>
+                                )}
+                            />
+                        </div>
                     )}
-                />
+                   <FormMessage />
+                 </FormItem>
             );
             break;
         default:
@@ -194,12 +243,12 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
 
         if (q.questionType === 'Checkbox') {
             const checkboxOptions = q.options || [];
-            const checkboxSchema = z.object(
-                checkboxOptions.reduce((acc, option) => {
+            const checkboxSchemaObject = checkboxOptions.reduce((acc, option) => {
                     acc[option] = z.boolean().default(false);
                     return acc;
-                }, {} as Record<string, z.ZodBoolean>)
-            );
+                }, {} as Record<string, z.ZodBoolean>);
+
+            const checkboxSchema = z.object(checkboxSchemaObject);
             
             schemaDefinition[questionKey] = isRequired 
                 ? checkboxSchema.refine(data => Object.values(data).some(v => v), { message: "At least one option must be selected." }) 
@@ -209,12 +258,29 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
                 acc[option] = false;
                 return acc;
             }, {} as Record<string, boolean>);
+            
+            if (checkboxOptions.includes('Other')) {
+                const otherFieldName = `${questionKey}_other`;
+                schemaDefinition[otherFieldName] = z.string().optional();
+                defaultValues[otherFieldName] = '';
+            }
 
         } else if (q.questionType === 'Date') {
             schemaDefinition[questionKey] = isRequired 
                 ? z.date({ required_error: "A date is required."}) 
                 : z.date().optional().nullable();
             defaultValues[questionKey] = null;
+        } else if (q.questionType === 'Select') {
+            schemaDefinition[questionKey] = isRequired 
+                ? z.string().min(1, 'This field is required.') 
+                : z.string().optional();
+            defaultValues[questionKey] = '';
+
+            if (q.options?.includes('Other')) {
+                const otherFieldName = `${questionKey}_other`;
+                schemaDefinition[otherFieldName] = z.string().optional();
+                defaultValues[otherFieldName] = '';
+            }
         } else {
             schemaDefinition[questionKey] = isRequired 
                 ? z.string().min(1, 'This field is required.') 
@@ -222,9 +288,36 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
             defaultValues[questionKey] = '';
         }
     });
+    
+    // Add refinements for 'Other' fields
+    const finalSchema = z.object(schemaDefinition).superRefine((data, ctx) => {
+        questions.forEach(q => {
+             if (q.options?.includes('Other')) {
+                const otherFieldName = `${q.questionText}_other`;
+                if (q.questionType === 'Select') {
+                     if (data[q.questionText] === 'Other' && !data[otherFieldName]) {
+                        ctx.addIssue({
+                            code: z.ZodIssueCode.custom,
+                            path: [otherFieldName],
+                            message: "Please specify the 'Other' value.",
+                        });
+                    }
+                } else if (q.questionType === 'Checkbox') {
+                    if (data[q.questionText]?.['Other'] && !data[otherFieldName]) {
+                        ctx.addIssue({
+                            code: z.ZodIssueCode.custom,
+                            path: [otherFieldName],
+                            message: "Please specify the 'Other' value.",
+                        });
+                    }
+                }
+             }
+        });
+    });
+
 
     return {
-        schema: z.object(schemaDefinition),
+        schema: finalSchema,
         defaultValues,
     };
 };
@@ -249,12 +342,28 @@ function ActualForm({ formSchema, defaultValues, formQuestions }: {
         
         formQuestions.forEach(q => {
             const value = processedValues[q.questionText];
-            if (q.questionType === 'Checkbox' && value) {
-                processedValues[q.questionText] = Object.entries(value)
-                    .filter(([, checked]) => checked)
-                    .map(([option]) => option)
-                    .join(', ');
+            const otherFieldName = `${q.questionText}_other`;
+            const otherValue = processedValues[otherFieldName];
+
+            if (q.questionType === 'Select' && value === 'Other') {
+                processedValues[q.questionText] = `Other: ${otherValue}`;
             }
+
+            if (q.questionType === 'Checkbox' && value) {
+                const selectedOptions = Object.entries(value)
+                    .filter(([, checked]) => checked)
+                    .map(([option]) => {
+                        if (option === 'Other') {
+                            return `Other: ${otherValue}`;
+                        }
+                        return option;
+                    })
+                    .join(', ');
+                processedValues[q.questionText] = selectedOptions;
+            }
+
+            delete processedValues[otherFieldName]; // Clean up extra field
+
             if (q.questionType === 'Date' && value instanceof Date) {
                  processedValues[q.questionText] = format(value, 'yyyy-MM-dd');
             }
