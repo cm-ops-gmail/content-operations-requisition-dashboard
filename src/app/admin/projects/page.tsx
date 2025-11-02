@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/hooks/use-auth';
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export default function ProjectsPage() {
   const { user } = useAuth();
@@ -154,6 +155,14 @@ export default function ProjectsPage() {
       </Popover>
     </TableCell>
   );
+  
+  const truncateHeader = (header: string, wordLimit: number) => {
+    const words = header.split(' ');
+    if (words.length > wordLimit) {
+      return words.slice(0, wordLimit).join(' ') + '...';
+    }
+    return header;
+  };
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
@@ -208,7 +217,20 @@ export default function ProjectsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[50px]">Select</TableHead>
-                  {headers.map((header) => <TableHead key={header}>{header}</TableHead>)}
+                    <TooltipProvider>
+                    {headers.map((header) => (
+                      <TableHead key={header}>
+                         <Tooltip>
+                            <TooltipTrigger>
+                                <span className="block truncate">{truncateHeader(header, 15)}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>{header}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                      </TableHead>
+                    ))}
+                    </TooltipProvider>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -274,5 +296,3 @@ export default function ProjectsPage() {
     </div>
   );
 }
-
-    
