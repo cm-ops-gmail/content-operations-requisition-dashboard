@@ -1,12 +1,11 @@
 
 import { getAllTickets, getWorkTypes, getTeams } from './actions';
-import { unstable_noStore as noStore } from 'next/cache';
 import { DashboardClient } from '@/components/DashboardClient';
 
+export const revalidate = 0; // Prevent caching to ensure fresh data
 export const dynamic = 'force-dynamic';
 
 async function getDashboardData() {
-  noStore();
   try {
     const [ticketData, teamsData, workTypesData] = await Promise.all([
         getAllTickets(), 
