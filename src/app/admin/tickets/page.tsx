@@ -253,7 +253,7 @@ export default function AllTicketsPage() {
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="Open">Pending</SelectItem>
+                                                <SelectItem value="Pending">Pending</SelectItem>
                                                 <SelectItem value="In Progress">In Progress</SelectItem>
                                                 <SelectItem value="Done">Done</SelectItem>
                                             </SelectContent>
@@ -264,7 +264,7 @@ export default function AllTicketsPage() {
                              if (cellIndex === createdDateIndex) {
                                 return <TableCell key={cellIndex}><ClientDate dateString={cell} /></TableCell>
                              }
-                            return <TableCell key={cellIndex}>{cell}</TableCell>
+                            return <TableCell key={cellIndex}>{cell === 'Open' ? 'Pending' : cell}</TableCell>
                         })}
                     </TableRow>
                     ))}
