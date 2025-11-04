@@ -369,5 +369,3 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
     </>
   );
 }
-
-    
