@@ -1,5 +1,4 @@
 
-
 import { getAllTickets, getWorkTypes, getTeams } from './actions';
 import { unstable_noStore as noStore } from 'next/cache';
 import { DashboardClient } from '@/components/DashboardClient';
@@ -30,7 +29,8 @@ async function getDashboardData() {
         
         if (statusIndex !== -1) {
             tickets.forEach(ticket => {
-                const status = ticket[statusIndex];
+                let status = ticket[statusIndex];
+                if (status === 'Open') status = 'Pending';
                 if (status) uniqueStatuses.add(status);
             });
         }
@@ -78,5 +78,3 @@ export default async function Home() {
     </div>
   );
 }
-
-
