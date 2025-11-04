@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getAllTickets, createProjectFromTicket, updateTicketStatus } from '@/app/actions';
-import { Loader2, FolderPlus, Calendar as CalendarIcon } from 'lucide-react';
+import { Loader2, FolderPlus, Calendar as CalendarIcon, Eye } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 
 
 const ClientDate = ({ dateString }: { dateString: string }) => {
@@ -36,6 +37,16 @@ const ClientDate = ({ dateString }: { dateString: string }) => {
     }
 }
 
+const VISIBLE_COLUMNS = [
+  'Ticket ID',
+  'Created Date',
+  'Status',
+  'Team',
+  'Work Type',
+  'Product/Course/Requisition Name',
+  'Your Email*',
+];
+
 
 export default function AllTicketsPage() {
   const { user } = useAuth();
@@ -47,6 +58,9 @@ export default function AllTicketsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fromDate, setFromDate] = useState<Date | undefined>();
   const [toDate, setToDate] = useState<Date | undefined>();
+  const [selectedTicketDetails, setSelectedTicketDetails] = useState<Record<string, string> | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
   const { toast } = useToast();
 
   const fetchTickets = async () => {
@@ -122,6 +136,17 @@ export default function AllTicketsPage() {
     }
   };
   
+    const handleViewDetails = (row: string[]) => {
+        const details = headers.reduce((acc, header, index) => {
+            if (!VISIBLE_COLUMNS.includes(header)) {
+                acc[header.replace(/\s*\(.*?\)/g, '').trim()] = row[index] || 'N/A';
+            }
+            return acc;
+        }, {} as Record<string, string>);
+        setSelectedTicketDetails(details);
+        setIsDialogOpen(true);
+    };
+
   const canManage = user?.role === 'admin';
   const statusIndex = headers.indexOf('Status');
   const createdDateIndex = headers.indexOf('Created Date');
@@ -139,6 +164,9 @@ export default function AllTicketsPage() {
         return false;
     }
   });
+  
+  const visibleHeaders = headers.filter(h => VISIBLE_COLUMNS.includes(h) || h === 'Status' || h === 'Created Date');
+
 
   const DatePicker = ({ date, setDate, placeholder }: { date?: Date; setDate: (date?: Date) => void; placeholder: string; }) => (
     <Popover>
@@ -165,115 +193,128 @@ export default function AllTicketsPage() {
     </Popover>
   );
 
-  const truncateHeader = (header: string, wordLimit: number) => {
-    const words = header.split(' ');
-    if (words.length > wordLimit) {
-      return words.slice(0, wordLimit).join(' ') + '...';
-    }
-    return header;
-  };
-  
   return (
-    <div className="container mx-auto py-8 px-4 md:px-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">All Submitted Tickets</h1>
-        {selectedTicket && canManage && (
-            <Button onClick={handleCreateProject} disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderPlus className="mr-2 h-4 w-4" />}
-                Create Project
-            </Button>
-        )}
-      </div>
-       <Card className="mb-6">
-        <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <Label htmlFor="from-date">From</Label>
-                <DatePicker date={fromDate} setDate={setFromDate} placeholder="Pick a start date" />
-            </div>
-            <div>
-                <Label htmlFor="to-date">To</Label>
-                <DatePicker date={toDate} setDate={setToDate} placeholder="Pick an end date" />
-            </div>
-        </CardContent>
-       </Card>
-      <Card>
-          <CardHeader>
-            <CardTitle>Tickets from Google Sheet</CardTitle>
-            <CardDescription>
-                This is a live view of all the tickets submitted through the form, from the 'Tickets' sheet. Select one to create a project.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-                <div className="flex justify-center items-center py-8"><Loader2 className="mr-2 h-8 w-8 animate-spin" /> Loading tickets...</div>
-            ) : error ? (
-                <p className="text-destructive text-center py-8">{error}</p>
-            ) : (
-             <div className="overflow-x-auto">
-                <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-[50px]">Select</TableHead>
-                        <TooltipProvider>
-                        {headers.map((header) => (
-                            <TableHead key={header}>
-                                <Tooltip>
-                                    <TooltipTrigger>
-                                        <span className="block truncate">{truncateHeader(header, 15)}</span>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>{header}</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TableHead>
-                        ))}
-                        </TooltipProvider>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {filteredTickets.map((row, rowIndex) => (
-                    <TableRow key={rowIndex}>
-                        <TableCell>
-                            <Checkbox 
-                                checked={selectedTicket?.rowIndex === rowIndex}
-                                onCheckedChange={() => handleSelectTicket(rowIndex, row)}
-                                disabled={!canManage}
-                            />
-                        </TableCell>
-                        {row.map((cell, cellIndex) => {
-                             if (cellIndex === statusIndex) {
-                                return (
-                                    <TableCell key={cellIndex}>
-                                        <Select
-                                            defaultValue={cell}
-                                            onValueChange={(newStatus) => handleStatusChange(rowIndex, newStatus)}
-                                            disabled={!canManage}
-                                        >
-                                            <SelectTrigger className="w-[150px]">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Pending">Pending</SelectItem>
-                                                <SelectItem value="In Progress">In Progress</SelectItem>
-                                                <SelectItem value="Done">Done</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </TableCell>
-                                )
-                             }
-                             if (cellIndex === createdDateIndex) {
-                                return <TableCell key={cellIndex}><ClientDate dateString={cell} /></TableCell>
-                             }
-                            return <TableCell key={cellIndex}>{cell === 'Open' ? 'Pending' : cell}</TableCell>
-                        })}
-                    </TableRow>
-                    ))}
-                </TableBody>
-                </Table>
-             </div>
-            )}
+    <>
+      <div className="container mx-auto py-8 px-4 md:px-6">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold">All Submitted Tickets</h1>
+          {selectedTicket && canManage && (
+              <Button onClick={handleCreateProject} disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderPlus className="mr-2 h-4 w-4" />}
+                  Create Project
+              </Button>
+          )}
+        </div>
+         <Card className="mb-6">
+          <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                  <Label htmlFor="from-date">From</Label>
+                  <DatePicker date={fromDate} setDate={setFromDate} placeholder="Pick a start date" />
+              </div>
+              <div>
+                  <Label htmlFor="to-date">To</Label>
+                  <DatePicker date={toDate} setDate={setToDate} placeholder="Pick an end date" />
+              </div>
           </CardContent>
-        </Card>
-    </div>
+         </Card>
+        <Card>
+            <CardHeader>
+              <CardTitle>Tickets from Google Sheet</CardTitle>
+              <CardDescription>
+                  This is a live view of all the tickets submitted through the form, from the 'Tickets' sheet. Select one to create a project.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                  <div className="flex justify-center items-center py-8"><Loader2 className="mr-2 h-8 w-8 animate-spin" /> Loading tickets...</div>
+              ) : error ? (
+                  <p className="text-destructive text-center py-8">{error}</p>
+              ) : (
+               <div className="overflow-x-auto">
+                  <Table>
+                  <TableHeader>
+                      <TableRow>
+                          <TableHead className="w-[50px]">Select</TableHead>
+                          {visibleHeaders.map((header) => (
+                              <TableHead key={header}>{header.replace('*', '')}</TableHead>
+                          ))}
+                          <TableHead>Actions</TableHead>
+                      </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                      {filteredTickets.map((row, rowIndex) => (
+                      <TableRow key={rowIndex}>
+                          <TableCell>
+                              <Checkbox 
+                                  checked={selectedTicket?.rowIndex === rowIndex}
+                                  onCheckedChange={() => handleSelectTicket(rowIndex, row)}
+                                  disabled={!canManage}
+                              />
+                          </TableCell>
+                          {visibleHeaders.map((header) => {
+                               const cellIndex = headers.indexOf(header);
+                               const cell = row[cellIndex];
+
+                               if (cellIndex === statusIndex) {
+                                  return (
+                                      <TableCell key={header}>
+                                          <Select
+                                              defaultValue={cell === 'Open' ? 'Pending' : cell}
+                                              onValueChange={(newStatus) => handleStatusChange(rowIndex, newStatus)}
+                                              disabled={!canManage}
+                                          >
+                                              <SelectTrigger className="w-[150px]">
+                                                  <SelectValue />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                  <SelectItem value="Pending">Pending</SelectItem>
+                                                  <SelectItem value="In Progress">In Progress</SelectItem>
+                                                  <SelectItem value="Done">Done</SelectItem>
+                                              </SelectContent>
+                                          </Select>
+                                      </TableCell>
+                                  )
+                               }
+                               if (cellIndex === createdDateIndex) {
+                                  return <TableCell key={header}><ClientDate dateString={cell} /></TableCell>
+                               }
+                              return <TableCell key={header}>{cell === 'Open' ? 'Pending' : cell}</TableCell>
+                          })}
+                          <TableCell>
+                              <Button variant="outline" size="sm" onClick={() => handleViewDetails(row)}>
+                                 <Eye className="mr-2 h-4 w-4" />
+                                 View Details
+                               </Button>
+                          </TableCell>
+                      </TableRow>
+                      ))}
+                  </TableBody>
+                  </Table>
+               </div>
+              )}
+            </CardContent>
+          </Card>
+      </div>
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-w-2xl">
+             <DialogHeader>
+                <DialogTitle>Ticket Details</DialogTitle>
+                <DialogDescription>Full details of the selected ticket.</DialogDescription>
+             </DialogHeader>
+             {selectedTicketDetails && (
+                <div className="mt-4 max-h-[60vh] overflow-y-auto pr-4">
+                    <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                       {Object.entries(selectedTicketDetails).map(([key, value]) => (
+                            <div key={key} className="border-b pb-2">
+                                <dt className="text-sm font-medium text-muted-foreground">{key}</dt>
+                                <dd className="mt-1 text-sm text-foreground">{value}</dd>
+                            </div>
+                       ))}
+                    </dl>
+                </div>
+             )}
+          </DialogContent>
+      </Dialog>
+    </>
   );
 }
