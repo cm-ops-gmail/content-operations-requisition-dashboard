@@ -149,7 +149,7 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
             acc.solved++;
         } else if (status === 'In Progress') {
             acc.inProgress++;
-        } else if (status === 'Open') {
+        } else if (status === 'Open' || status === 'Pending') {
             acc.pending++;
         }
         return acc;
@@ -168,7 +168,7 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
   const handleViewDetails = (row: string[]) => {
     const details = headers.reduce((acc, header, index) => {
         if (!VISIBLE_COLUMNS.includes(header)) {
-            acc[header.replace(/\s*\(.*\)/g, '').trim()] = row[index] || 'N/A';
+            acc[header.replace(/\s*\(.*?\)/g, '').trim()] = row[index] || 'N/A';
         }
         return acc;
     }, {} as Record<string, string>);
@@ -309,7 +309,7 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
                         {visibleHeaders.map((header) => (
                           <TableHead key={header}>{header.replace('*', '')}</TableHead>
                         ))}
-                        <TableHead>Actions</TableHead>
+                        {filteredTickets.length > 0 && <TableHead>Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -369,3 +369,5 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
     </>
   );
 }
+
+    
