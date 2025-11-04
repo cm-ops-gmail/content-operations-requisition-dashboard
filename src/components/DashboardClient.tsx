@@ -44,6 +44,7 @@ const ClientDate = ({ dateString }: { dateString: string }) => {
 const StatusIndicator = ({ status }: { status: string }) => {
     const statusMap: Record<string, { label: string; color: string; icon: JSX.Element }> = {
         'Open': { label: 'Pending', color: 'bg-yellow-500', icon: <Circle className="h-2.5 w-2.5 text-yellow-500 fill-current" /> },
+        'Pending': { label: 'Pending', color: 'bg-yellow-500', icon: <Circle className="h-2.5 w-2.5 text-yellow-500 fill-current" /> },
         'In Progress': { label: 'In Progress', color: 'bg-blue-500', icon: <Circle className="h-2.5 w-2.5 text-blue-500 fill-current" /> },
         'Done': { label: 'Done', color: 'bg-green-500', icon: <Circle className="h-2.5 w-2.5 text-green-500 fill-current" /> },
     };
@@ -130,7 +131,7 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
     })();
     
     // Status filter
-    const hasStatus = statusFilter === 'All' || (statusIndex !== -1 && row[statusIndex] === statusFilter);
+    const hasStatus = statusFilter === 'All' || (statusIndex !== -1 && (row[statusIndex] === statusFilter || (statusFilter === 'Pending' && row[statusIndex] === 'Open')));
 
     // Team filter
     const hasTeam = teamFilter === 'All' || (teamIndex !== -1 && (row[teamIndex] || '').split(', ').includes(teamFilter));
@@ -167,7 +168,7 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
   const handleViewDetails = (row: string[]) => {
     const details = headers.reduce((acc, header, index) => {
         if (!VISIBLE_COLUMNS.includes(header)) {
-            acc[header] = row[index] || 'N/A';
+            acc[header.replace(/\s*\(.*\)/g, '').trim()] = row[index] || 'N/A';
         }
         return acc;
     }, {} as Record<string, string>);
@@ -354,7 +355,7 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
                         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                            {Object.entries(selectedTicketDetails).map(([key, value]) => (
                                 <div key={key} className="border-b pb-2">
-                                    <dt className="text-sm font-medium text-muted-foreground">{key.replace(/\*|\s*\(.*\)/g, '').trim()}</dt>
+                                    <dt className="text-sm font-medium text-muted-foreground">{key}</dt>
                                     <dd className="mt-1 text-sm text-foreground">{value}</dd>
                                 </div>
                            ))}
