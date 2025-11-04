@@ -8,13 +8,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { parseISO, isWithinInterval, startOfDay, endOfDay, format } from 'date-fns';
-import { Search, Ticket, CheckCircle2, LoaderCircle, X, Calendar as CalendarIcon, Circle } from 'lucide-react';
+import { Search, Ticket, CheckCircle2, LoaderCircle, X, Calendar as CalendarIcon, Circle, Eye } from 'lucide-react';
 import { Button } from './ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+
 
 interface DashboardClientProps {
     tickets: string[][];
@@ -56,6 +58,16 @@ const StatusIndicator = ({ status }: { status: string }) => {
     );
 };
 
+const VISIBLE_COLUMNS = [
+  'Ticket ID',
+  'Created Date',
+  'Status',
+  'Team',
+  'Work Type',
+  'Product/Course/Requisition Name',
+  'Your Email*',
+];
+
 
 export function DashboardClient({ tickets, headers: initialHeaders, teams, statuses, workTypes }: DashboardClientProps) {
   const [fromDate, setFromDate] = useState<Date | undefined>();
@@ -64,6 +76,8 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
   const [teamFilter, setTeamFilter] = useState('All');
   const [workTypeFilter, setWorkTypeFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTicketDetails, setSelectedTicketDetails] = useState<Record<string, string> | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const headers = useMemo(() => {
     const newHeaders = [...initialHeaders];
@@ -80,6 +94,11 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
     
     return newHeaders;
   }, [initialHeaders]);
+  
+  const visibleHeaders = useMemo(() => {
+    return headers.filter(h => VISIBLE_COLUMNS.includes(h));
+  }, [headers]);
+
 
   const createdDateIndex = headers.indexOf('Created Date');
   const statusIndex = headers.indexOf('Status');
@@ -144,6 +163,17 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
     setTeamFilter('All');
     setWorkTypeFilter('All');
   };
+  
+  const handleViewDetails = (row: string[]) => {
+    const details = headers.reduce((acc, header, index) => {
+        if (!VISIBLE_COLUMNS.includes(header)) {
+            acc[header] = row[index] || 'N/A';
+        }
+        return acc;
+    }, {} as Record<string, string>);
+    setSelectedTicketDetails(details);
+    setIsDialogOpen(true);
+  }
 
   const isAnyFilterActive = searchQuery || fromDate || toDate || statusFilter !== 'All' || teamFilter !== 'All' || workTypeFilter !== 'All';
 
@@ -178,14 +208,6 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
         </PopoverContent>
     </Popover>
   );
-
-  const truncateHeader = (header: string, wordLimit: number) => {
-    const words = header.split(' ');
-    if (words.length > wordLimit) {
-      return words.slice(0, wordLimit).join(' ') + '...';
-    }
-    return header;
-  };
 
   return (
     <>
@@ -278,51 +300,69 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                    <TooltipProvider>
-                    {headers.map((header) => (
-                      <TableHead key={header}>
-                        <Tooltip>
-                            <TooltipTrigger>
-                                <span className="block truncate">{truncateHeader(header, 15)}</span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{header}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                      </TableHead>
-                    ))}
-                    </TooltipProvider>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTickets.length > 0 ? (
-                  filteredTickets.map((row, rowIndex) => (
-                    <TableRow key={rowIndex}>
-                      {row.map((cell, cellIndex) => {
-                         if (cellIndex === createdDateIndex) {
-                             return <TableCell key={cellIndex}><ClientDate dateString={cell} /></TableCell>
-                         }
-                         if (cellIndex === statusIndex) {
-                            return <TableCell key={cellIndex}><StatusIndicator status={cell} /></TableCell>
-                         }
-                         return <TableCell key={cellIndex}>{cell}</TableCell>
-                      })}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                        {visibleHeaders.map((header) => (
+                          <TableHead key={header}>{header.replace('*', '')}</TableHead>
+                        ))}
+                        <TableHead>Actions</TableHead>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                      <TableCell colSpan={headers.length} className="h-24 text-center">
-                          No tickets found.
-                      </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTickets.length > 0 ? (
+                      filteredTickets.map((row, rowIndex) => (
+                        <TableRow key={rowIndex}>
+                          {visibleHeaders.map((header) => {
+                             const cellIndex = headers.indexOf(header);
+                             const cell = row[cellIndex];
+                             if (header === 'Created Date') {
+                                 return <TableCell key={header}><ClientDate dateString={cell} /></TableCell>
+                             }
+                             if (header === 'Status') {
+                                return <TableCell key={header}><StatusIndicator status={cell} /></TableCell>
+                             }
+                             return <TableCell key={header}>{cell}</TableCell>
+                          })}
+                          <TableCell>
+                               <Button variant="outline" size="sm" onClick={() => handleViewDetails(row)}>
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  View Details
+                                </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                          <TableCell colSpan={visibleHeaders.length + 1} className="h-24 text-center">
+                              No tickets found.
+                          </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              <DialogContent className="max-w-2xl">
+                 <DialogHeader>
+                    <DialogTitle>Ticket Details</DialogTitle>
+                    <DialogDescription>Full details of the selected ticket.</DialogDescription>
+                 </DialogHeader>
+                 {selectedTicketDetails && (
+                    <div className="mt-4 max-h-[60vh] overflow-y-auto pr-4">
+                        <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                           {Object.entries(selectedTicketDetails).map(([key, value]) => (
+                                <div key={key} className="border-b pb-2">
+                                    <dt className="text-sm font-medium text-muted-foreground">{key.replace(/\*|\s*\(.*\)/g, '').trim()}</dt>
+                                    <dd className="mt-1 text-sm text-foreground">{value}</dd>
+                                </div>
+                           ))}
+                        </dl>
+                    </div>
+                 )}
+              </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
     </>
