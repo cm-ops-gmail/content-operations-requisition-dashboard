@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm, type UseFormReturn, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -484,5 +484,3 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
 
     return null;
 }
-
-    
