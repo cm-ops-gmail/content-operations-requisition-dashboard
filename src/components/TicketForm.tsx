@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useForm, type UseFormReturn } from 'react-hook-form';
+import { useForm, type UseFormReturn, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -26,11 +26,20 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
     const isRequired = question.questionText.endsWith('*');
     const label = question.questionText.replace(/\*$/, '').replace(/\s\((select:|checkbox:).*?\)/i, '');
     
-    let fieldComponent;
-
-    const otherValue = form.watch(question.questionText) === 'Other';
-    const otherCheckboxValue = form.watch(`${question.questionText}.Other`);
     const otherFieldName = `${question.questionText}_other`;
+
+    // Use useWatch to get the value of the field for conditional rendering
+    const selectValue = useWatch({
+        control: form.control,
+        name: question.questionText,
+    });
+    
+    const otherCheckboxValue = useWatch({
+        control: form.control,
+        name: `${question.questionText}.Other`
+    });
+
+    let fieldComponent;
     
     switch (question.questionType) {
         case 'Text':
@@ -137,7 +146,7 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
                         </FormItem>
                     )}
                 />
-                {question.options?.includes('Other') && otherValue && (
+                {selectValue === 'Other' && (
                      <FormField
                         control={form.control}
                         name={otherFieldName}
@@ -197,7 +206,7 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
                                         />
                                     </FormControl>
                                     <FormLabel className="font-normal">
-                                        Other:
+                                        Other
                                     </FormLabel>
                                      {otherCheckboxValue && (
                                         <FormField
@@ -205,7 +214,7 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
                                             name={otherFieldName}
                                             render={({ field: otherField }) => (
                                                 <FormControl>
-                                                    <Input className="h-8" placeholder="Please specify" {...otherField} />
+                                                    <Textarea className="h-8" placeholder="Please specify" {...otherField} />
                                                 </FormControl>
                                             )}
                                         />
@@ -289,7 +298,7 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
         }
     });
     
-    // Add refinements for 'Other' fields
+    // Add validation refinements for 'Other' fields
     const finalSchema = z.object(schemaDefinition).superRefine((data, ctx) => {
         questions.forEach(q => {
              if (q.options?.includes('Other')) {
@@ -302,7 +311,8 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
                             message: "Please specify the 'Other' value.",
                         });
                     }
-                } else if (q.questionType === 'Checkbox') {
+                } 
+                else if (q.questionType === 'Checkbox') {
                     if (data[q.questionText]?.['Other'] && !data[otherFieldName]) {
                         ctx.addIssue({
                             code: z.ZodIssueCode.custom,
@@ -314,7 +324,6 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
              }
         });
     });
-
 
     return {
         schema: finalSchema,
@@ -475,3 +484,5 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
 
     return null;
 }
+
+    
