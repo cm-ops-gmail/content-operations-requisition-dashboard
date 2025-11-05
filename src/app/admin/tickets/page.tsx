@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getAllTickets, createProjectFromTicket, updateTicketStatus } from '@/app/actions';
-import { Loader2, FolderPlus, Calendar as CalendarIcon, Eye } from 'lucide-react';
+import { Loader2, FolderPlus, Calendar as CalendarIcon, Eye, Circle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,8 +18,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 
 
 const ClientDate = ({ dateString }: { dateString: string }) => {
@@ -36,6 +36,22 @@ const ClientDate = ({ dateString }: { dateString: string }) => {
         return <>{dateString}</>;
     }
 }
+
+const WorkTypeIndicator = ({ workType }: { workType: string }) => {
+    const typeMap: Record<string, { label: string; color: string; }> = {
+        'Urgent': { label: 'Urgent', color: 'text-red-500 fill-red-500' },
+        'Regular': { label: 'Regular', color: 'text-green-500 fill-green-500' },
+    };
+
+    const currentType = typeMap[workType] || { label: workType, color: 'text-gray-500 fill-gray-500' };
+
+    return (
+        <Badge variant="outline" className="flex items-center gap-2 capitalize">
+           <Circle className={`h-2.5 w-2.5 ${currentType.color}`} />
+           <span>{currentType.label}</span>
+        </Badge>
+    );
+};
 
 const VISIBLE_COLUMNS = [
   'Ticket ID',
@@ -149,6 +165,7 @@ export default function AllTicketsPage() {
 
   const canManage = user?.role === 'admin';
   const statusIndex = headers.indexOf('Status');
+  const workTypeIndex = headers.indexOf('Work Type');
   const createdDateIndex = headers.indexOf('Created Date');
 
   const filteredTickets = tickets.filter(row => {
@@ -275,6 +292,9 @@ export default function AllTicketsPage() {
                                       </TableCell>
                                   )
                                }
+                               if (cellIndex === workTypeIndex) {
+                                  return <TableCell key={header}><WorkTypeIndicator workType={cell} /></TableCell>
+                               }
                                if (cellIndex === createdDateIndex) {
                                   return <TableCell key={header}><ClientDate dateString={cell} /></TableCell>
                                }
@@ -318,3 +338,5 @@ export default function AllTicketsPage() {
     </>
   );
 }
+
+    
