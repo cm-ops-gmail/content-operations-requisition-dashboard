@@ -1,3 +1,4 @@
+
 "use server";
 
 import { intelligentTicketRouting, type IntelligentTicketRoutingInput } from '@/ai/flows/intelligent-ticket-routing';
@@ -52,12 +53,12 @@ function inferQuestionType(header: string): { type: FormQuestion['questionType']
     const lowerHeader = header.toLowerCase();
     
     if (lowerHeader.includes('(select:')) {
-      const optionsMatch = header.match(/\(select:\s*(.*?)\)/i);
+      const optionsMatch = lowerHeader.match(/\(select:\s*(.*?)\)/);
       const options = optionsMatch ? optionsMatch[1].split(';').map(o => o.trim()) : [];
       return { type: 'Select', options };
     }
     if (lowerHeader.includes('(checkbox:')) {
-      const optionsMatch = header.match(/\(checkbox:\s*(.*?)\)/i);
+      const optionsMatch = lowerHeader.match(/\(checkbox:\s*(.*?)\)/);
       const options = optionsMatch ? optionsMatch[1].split(';').map(o => o.trim()) : [];
       return { type: 'Checkbox', options };
     }
