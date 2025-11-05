@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -241,7 +242,7 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
     };
 
     const defaultValues: Record<string, any> = {
-        'Team': Array.isArray(teams) ? teams.join(', ') : teams,
+        'Team': teams.join(', '),
         'Work Type': workType,
     };
 
@@ -330,10 +331,11 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
     };
 };
 
-function ActualForm({ formSchema, defaultValues, formQuestions }: {
+function ActualForm({ formSchema, defaultValues, formQuestions, workType }: {
     formSchema: z.ZodObject<any, any, any>,
     defaultValues: Record<string, any>,
     formQuestions: FormQuestion[],
+    workType: string,
 }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { toast } = useToast();
@@ -395,8 +397,18 @@ function ActualForm({ formSchema, defaultValues, formQuestions }: {
         setIsSubmitting(false);
     }
     
+    const getCardClasses = () => {
+        if (workType === 'Urgent') {
+            return 'border-red-500/50';
+        }
+        if (workType === 'Regular') {
+            return 'border-green-500/50';
+        }
+        return '';
+    }
+
     return (
-        <Card>
+        <Card className={`transition-all ${getCardClasses()}`}>
             <CardContent className="p-6">
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -478,7 +490,7 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
     }
     
     if (formConfig) {
-        return <ActualForm {...formConfig} />;
+        return <ActualForm key={teams.join('-')} {...formConfig} workType={workType} />;
     }
 
     return null;
