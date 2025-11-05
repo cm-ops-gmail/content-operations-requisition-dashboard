@@ -53,12 +53,12 @@ function inferQuestionType(header: string): { type: FormQuestion['questionType']
     const lowerHeader = header.toLowerCase();
     
     if (lowerHeader.includes('(select:')) {
-      const optionsMatch = lowerHeader.match(/\(select:\s*(.*?)\)/);
+      const optionsMatch = header.match(/\(select:\s*(.*?)\)/i);
       const options = optionsMatch ? optionsMatch[1].split(';').map(o => o.trim()) : [];
       return { type: 'Select', options };
     }
     if (lowerHeader.includes('(checkbox:')) {
-      const optionsMatch = lowerHeader.match(/\(checkbox:\s*(.*?)\)/);
+      const optionsMatch = header.match(/\(checkbox:\s*(.*?)\)/i);
       const options = optionsMatch ? optionsMatch[1].split(';').map(o => o.trim()) : [];
       return { type: 'Checkbox', options };
     }
