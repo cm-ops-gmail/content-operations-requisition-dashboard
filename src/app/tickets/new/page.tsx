@@ -17,7 +17,7 @@ export default function NewTicketPage() {
   const [workTypeInfo, setWorkTypeInfo] = useState<{ question: string; options: string[] }>({ question: '', options: [] });
   const [selectedWorkType, setSelectedWorkType] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [isFormReady, setIsFormReady] = useState(false);
 
   useEffect(() => {
     async function fetchInitialData() {
@@ -34,21 +34,42 @@ export default function NewTicketPage() {
     fetchInitialData();
   }, []);
 
+  const updateFormVisibility = () => {
+      // This will be called after state updates
+      if (selectedTeams.length > 0 && selectedWorkType) {
+        setIsFormReady(true);
+      } else {
+        setIsFormReady(false);
+      }
+  };
+
+  // We use a separate effect to handle visibility to avoid race conditions with state updates
+  useEffect(() => {
+      if (!isLoading) {
+        updateFormVisibility();
+      }
+  }, [selectedTeams, selectedWorkType, isLoading]);
+
+
   const handleTeamChange = (team: string, checked: boolean) => {
       setSelectedTeams(prev => {
           const newTeams = checked ? [...prev, team] : prev.filter(t => t !== team);
-          updateFormVisibility(newTeams.length > 0, !!selectedWorkType);
           return newTeams;
       });
   };
 
   const handleWorkTypeChange = (workType: string) => {
       setSelectedWorkType(workType);
-      updateFormVisibility(selectedTeams.length > 0, !!workType);
   }
 
-  const updateFormVisibility = (hasTeams: boolean, hasWorkType: boolean) => {
-      setIsFormVisible(hasTeams && hasWorkType);
+  const getCardClasses = () => {
+    if (selectedWorkType === 'Urgent') {
+        return 'border-red-500/50';
+    }
+    if (selectedWorkType === 'Regular') {
+        return 'border-green-500/50';
+    }
+    return '';
   }
 
   return (
@@ -58,7 +79,7 @@ export default function NewTicketPage() {
         <p className="text-muted-foreground">Fill out the form below to submit a new ticket.</p>
       </div>
 
-      <Card className="mb-6">
+      <Card className={`mb-6 transition-all ${getCardClasses()}`}>
         <CardContent className="p-6 space-y-6">
             <div className="space-y-2">
              <Label htmlFor="work-type-select">{workTypeInfo.question || 'Work Type'}</Label>
@@ -87,6 +108,7 @@ export default function NewTicketPage() {
                         <Checkbox
                             id={`team-${team}`}
                             onCheckedChange={(checked) => handleTeamChange(team, Boolean(checked))}
+                            checked={selectedTeams.includes(team)}
                         />
                         <label
                             htmlFor={`team-${team}`}
@@ -101,7 +123,13 @@ export default function NewTicketPage() {
         </CardContent>
       </Card>
       
-      {isFormVisible && <TicketForm teams={selectedTeams} workType={selectedWorkType} />}
+      {isFormReady ? (
+        <TicketForm key={selectedTeams.join('-')} teams={selectedTeams} workType={selectedWorkType} />
+      ) : (
+        <div className="text-center text-muted-foreground p-8">
+            <p>Please select a work type and at least one team to see the form.</p>
+        </div>
+      )}
     </div>
   );
 }
