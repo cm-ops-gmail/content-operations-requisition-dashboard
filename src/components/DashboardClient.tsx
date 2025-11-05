@@ -14,9 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
-
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 interface DashboardClientProps {
     tickets: string[][];
@@ -59,6 +57,23 @@ const StatusIndicator = ({ status }: { status: string }) => {
     );
 };
 
+const WorkTypeIndicator = ({ workType }: { workType: string }) => {
+    const typeMap: Record<string, { label: string; color: string; }> = {
+        'Urgent': { label: 'Urgent', color: 'text-red-500 fill-red-500' },
+        'Regular': { label: 'Regular', color: 'text-green-500 fill-green-500' },
+    };
+
+    const currentType = typeMap[workType] || { label: workType, color: 'text-gray-500 fill-gray-500' };
+
+    return (
+        <Badge variant="outline" className="flex items-center gap-2 capitalize">
+           <Circle className={`h-2.5 w-2.5 ${currentType.color}`} />
+           <span>{currentType.label}</span>
+        </Badge>
+    );
+};
+
+
 const VISIBLE_COLUMNS = [
   'Ticket ID',
   'Created Date',
@@ -70,7 +85,7 @@ const VISIBLE_COLUMNS = [
 ];
 
 
-export function DashboardClient({ tickets, headers: initialHeaders, teams, statuses, workTypes }: DashboardClientProps) {
+export function DashboardClient({ tickets, headers, teams, statuses, workTypes }: DashboardClientProps) {
   const [fromDate, setFromDate] = useState<Date | undefined>();
   const [toDate, setToDate] = useState<Date | undefined>();
   const [statusFilter, setStatusFilter] = useState('All');
@@ -80,22 +95,6 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
   const [selectedTicketDetails, setSelectedTicketDetails] = useState<Record<string, string> | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const headers = useMemo(() => {
-    const newHeaders = [...initialHeaders];
-    const teamQuestionHeader = 'which team you want to select*';
-    const teamIndex = newHeaders.indexOf('Team');
-    const teamQuestionIndex = newHeaders.findIndex(h => h.toLowerCase().startsWith('the requisition is for which team'));
-
-    // If 'Team' column doesn't exist, we might need to rename the question column
-    if (teamIndex === -1 && teamQuestionIndex !== -1) {
-      newHeaders[teamQuestionIndex] = 'Team';
-    } else if (teamIndex === -1 && teamQuestionIndex === -1) {
-       newHeaders.push('Team');
-    }
-    
-    return newHeaders;
-  }, [initialHeaders]);
-  
   const visibleHeaders = useMemo(() => {
     return headers.filter(h => VISIBLE_COLUMNS.includes(h));
   }, [headers]);
@@ -325,6 +324,9 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
                              if (header === 'Status') {
                                 return <TableCell key={header}><StatusIndicator status={cell} /></TableCell>
                              }
+                              if (header === 'Work Type') {
+                                return <TableCell key={header}><WorkTypeIndicator workType={cell} /></TableCell>
+                             }
                              return <TableCell key={header}>{cell}</TableCell>
                           })}
                           <TableCell>
@@ -369,3 +371,5 @@ export function DashboardClient({ tickets, headers: initialHeaders, teams, statu
     </>
   );
 }
+
+    
