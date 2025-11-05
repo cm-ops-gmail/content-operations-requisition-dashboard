@@ -182,7 +182,7 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
                                checked={field.value}
                                onCheckedChange={field.onChange}
                              />
-                           </FormLabel>
+                           </FormControl>
                            <FormLabel className="font-normal">
                              {option}
                            </FormLabel>
@@ -236,12 +236,12 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
 // Function to generate the Zod schema and default values dynamically
 const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[], workType: string) => {
     const schemaDefinition: Record<string, any> = {
-        'Team': z.array(z.string()),
+        'Team': z.string(),
         'Work Type': z.string(),
     };
 
     const defaultValues: Record<string, any> = {
-        'Team': teams,
+        'Team': Array.isArray(teams) ? teams.join(', ') : teams,
         'Work Type': workType,
     };
 
@@ -478,7 +478,7 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
     }
     
     if (formConfig) {
-        return <ActualForm key={teams.join('-')} {...formConfig} />;
+        return <ActualForm {...formConfig} />;
     }
 
     return null;
