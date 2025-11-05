@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -183,7 +182,7 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
                                checked={field.value}
                                onCheckedChange={field.onChange}
                              />
-                           </FormControl>
+                           </FormLabel>
                            <FormLabel className="font-normal">
                              {option}
                            </FormLabel>
@@ -237,12 +236,12 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
 // Function to generate the Zod schema and default values dynamically
 const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[], workType: string) => {
     const schemaDefinition: Record<string, any> = {
-        'Team': z.string(),
+        'Team': z.array(z.string()),
         'Work Type': z.string(),
     };
 
     const defaultValues: Record<string, any> = {
-        'Team': teams.join(', '),
+        'Team': teams,
         'Work Type': workType,
     };
 
