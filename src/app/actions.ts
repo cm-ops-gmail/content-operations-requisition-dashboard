@@ -1,4 +1,3 @@
-
 "use server";
 
 import { intelligentTicketRouting, type IntelligentTicketRoutingInput } from '@/ai/flows/intelligent-ticket-routing';
@@ -39,7 +38,13 @@ export async function getTicketRoutingSuggestion(formData: FormData) {
 }
 
 export async function submitTicket(data: Record<string, any>) {
-    return await appendRow(data, 'Tickets');
+    const dataWithTimestamp = {
+        ...data,
+        'Ticket ID': `TICKET-${Date.now()}`,
+        'Created Date': new Date().toISOString(),
+        'Status': 'Open'
+    };
+    return await appendRow(dataWithTimestamp, 'Tickets');
 }
 
 // Inferred question type based on header text
@@ -47,13 +52,11 @@ function inferQuestionType(header: string): { type: FormQuestion['questionType']
     const lowerHeader = header.toLowerCase();
     
     if (lowerHeader.includes('(select:')) {
-      // Use the original header to extract options to preserve case
       const optionsMatch = header.match(/\(select:\s*(.*?)\)/i);
       const options = optionsMatch ? optionsMatch[1].split(';').map(o => o.trim()) : [];
       return { type: 'Select', options };
     }
     if (lowerHeader.includes('(checkbox:')) {
-      // Use the original header to extract options to preserve case
       const optionsMatch = header.match(/\(checkbox:\s*(.*?)\)/i);
       const options = optionsMatch ? optionsMatch[1].split(';').map(o => o.trim()) : [];
       return { type: 'Checkbox', options };
@@ -69,76 +72,59 @@ function inferQuestionType(header: string): { type: FormQuestion['questionType']
 export async function getFormQuestions(team: string): Promise<FormQuestion[]> {
     if (!team) return [];
 
-    try {
-        const sheetData = await getSheetData('FormQuestions');
-        if (!sheetData.values || sheetData.values.length === 0) {
-            // Initialize FormQuestions with headers if it's empty
-            await appendRow({ 'Team': 'Team', 'QuestionText': 'QuestionText'}, 'FormQuestions');
-            return [];
-        }
-        const headers = sheetData.values[0];
-        const teamIndex = headers.indexOf('Team');
-        const questionTextIndex = headers.indexOf('QuestionText');
-
-        if (teamIndex === -1 || questionTextIndex === -1) {
-            // This case indicates FormQuestions is not set up correctly.
-            // Let's try to set it up.
-            await appendRow({ 'Team': 'Team', 'QuestionText': 'QuestionText'}, 'FormQuestions');
-            return [];
-        }
-
-        const teamQuestions = sheetData.values
-            .slice(1)
-            .map((row, index) => ({ row, originalIndex: index + 1 })) // Keep track of original index
-            .filter(({ row }) => row[teamIndex] === team)
-            .map(({ row, originalIndex }) => {
-                const questionText = row[questionTextIndex];
-                const { type, options } = inferQuestionType(questionText);
-                return {
-                    id: `col-${originalIndex}`,
-                    questionText: questionText,
-                    questionType: type,
-                    options: options,
-                };
-            });
-
-        return teamQuestions;
-    } catch (error) {
-        console.error(`Error in getFormQuestions for team ${team}:`, error);
-        // Attempt to initialize the sheet if it might not exist
-        if (error instanceof Error && (error.message.includes('not found') || error.message.includes('Permission denied'))) {
-            try {
-                await getSheetId('FormQuestions'); // This will create it if it doesn't exist.
-                await appendRow({ 'Team': 'Team', 'QuestionText': 'QuestionText'}, 'FormQuestions');
-            } catch (initError) {
-                console.error('Failed to initialize FormQuestions sheet:', initError);
-            }
-        }
-        return []; // Return empty array on error
+    const sheetData = await getSheetData('FormQuestions');
+    if (!sheetData.values || sheetData.values.length === 0) {
+        // Initialize FormQuestions with headers if it's empty
+        await appendRow({ 'Team': 'Team', 'QuestionText': 'QuestionText'}, 'FormQuestions', true);
+        return [];
     }
+    const headers = sheetData.values[0];
+    const teamIndex = headers.indexOf('Team');
+    const questionTextIndex = headers.indexOf('QuestionText');
+
+    if (teamIndex === -1 || questionTextIndex === -1) {
+        // This case indicates FormQuestions is not set up correctly.
+        // Let's try to set it up.
+        await appendRow({ 'Team': 'Team', 'QuestionText': 'QuestionText'}, 'FormQuestions', true);
+        return [];
+    }
+
+    const teamQuestions = sheetData.values
+        .slice(1)
+        .map((row, index) => ({ row, originalIndex: index + 1 })) // Keep track of original index
+        .filter(({ row }) => row[teamIndex] === team)
+        .map(({ row, originalIndex }) => {
+            const questionText = row[questionTextIndex];
+            const { type, options } = inferQuestionType(questionText);
+            return {
+                id: `col-${originalIndex}`,
+                questionText: questionText,
+                questionType: type,
+                options: options,
+            };
+        });
+
+    return teamQuestions;
 }
 
 export async function getTeams(): Promise<string[]> {
-    try {
-        const sheetData = await getSheetData('FormQuestions');
-        if (!sheetData.values || sheetData.values.length <= 1) {
-            return [];
-        }
-        const headers = sheetData.values[0];
-        const teamIndex = headers.indexOf('Team');
-        if (teamIndex === -1) {
-            return [];
-        }
-        const teams = new Set(sheetData.values.slice(1).map(row => row[teamIndex]));
-        return Array.from(teams);
-    } catch (error) {
-        console.error('Error getting teams:', error);
+    const sheetData = await getSheetData('FormQuestions');
+    if (!sheetData.values || sheetData.values.length <= 1) {
         return [];
     }
+    const headers = sheetData.values[0];
+    const teamIndex = headers.indexOf('Team');
+    if (teamIndex === -1) {
+        return [];
+    }
+    const teams = new Set(sheetData.values.slice(1).map(row => row[teamIndex]));
+    return Array.from(teams);
 }
 
 export async function addTeam(teamName: string) {
     // A new team is implicitly created by adding a question for it.
+    // We can add a dummy entry to make it appear in the list, 
+    // which will be overwritten when a real question is added.
     // Let's add a placeholder to ensure it appears in the list.
     return addFormQuestion(teamName, "Default placeholder question (can be deleted)");
 }
@@ -280,7 +266,7 @@ export async function addMember(name: string, team: string) {
         const sheetData = await getSheetData('Members');
         const headers = sheetData.values?.[0] || ['Name', 'Team'];
         if (!sheetData.values || sheetData.values.length === 0) {
-             await appendRow(Object.fromEntries(headers.map(h => [h, h])), 'Members');
+             await appendRow(Object.fromEntries(headers.map(h => [h, h])), 'Members', true);
         }
 
         const teamIndex = headers.indexOf('Team');
@@ -325,12 +311,14 @@ export async function createProjectFromTicket(ticketRow: { rowIndex: number, val
 
         const projectId = `PROJ-${Date.now()}`;
 
-        let projectHeaders = (await getSheetData('Projects')).values?.[0];
-        if (!projectHeaders || projectHeaders.length === 0) {
-            projectHeaders = ['Project ID', 'Ticket ID', 'Start Date', 'End Date', 'Assignee', 'Kanban Initialized'];
-            await appendRow(Object.fromEntries(projectHeaders.map(h => [h, ''])), 'Projects');
+        const projectHeaders = ['Project ID', 'Ticket ID', 'Start Date', 'End Date', 'Assignee', 'Kanban Initialized', ...ticketHeaders.filter(h => h !== 'Ticket ID')];
+
+        // Ensure Projects has headers
+        const projectSheetData = await getSheetData('Projects');
+        if (!projectSheetData.values || projectSheetData.values.length === 0) {
+            await appendRow(projectHeaders.reduce((acc, h) => ({...acc, [h]: ''}), {}), 'Projects', true);
         }
-        
+
         const projectData: Record<string, string> = {
             'Project ID': projectId,
             'Ticket ID': ticketId,
@@ -341,7 +329,7 @@ export async function createProjectFromTicket(ticketRow: { rowIndex: number, val
         };
         
         ticketHeaders.forEach((header, i) => {
-            if (header !== 'Ticket ID' && projectHeaders?.includes(header)) {
+            if (header !== 'Ticket ID') {
                 projectData[header] = ticketRow.values[i] || '';
             }
         });
@@ -415,7 +403,7 @@ export async function initializeKanban(rowIndex: number, projectId: string) {
         const kanbanSheetData = await getSheetData('KanbanTasks');
         if (!kanbanSheetData.values || kanbanSheetData.values.length === 0) {
             const headers = ['Project ID', 'Task ID', 'Title', 'Status', 'Assignee', 'Due Date', 'Description', 'Type', 'Priority', 'Tags'];
-            await appendRow(headers.reduce((acc, h) => ({...acc, [h]: ''}), {}), 'KanbanTasks');
+            await appendRow(headers.reduce((acc, h) => ({...acc, [h]: ''}), {}), 'KanbanTasks', true);
         }
         
         await appendRow({
@@ -570,9 +558,8 @@ export async function getWorkTypes(): Promise<{ question: string; options: strin
         let sheetData = await getSheetData(sheetName);
 
         if (!sheetData.values || sheetData.values.length === 0) {
-            await getSheetId(sheetName); // Ensure sheet exists
             const header = { [defaultQuestion]: defaultQuestion };
-            await appendRow(header, sheetName);
+            await appendRow(header, sheetName, true);
             
             for (const type of defaultOptions) {
                 await appendRow({ [defaultQuestion]: type }, sheetName);
@@ -678,7 +665,3 @@ export async function updateWorkTypeQuestion(newQuestion: string) {
         return { success: false, error: 'An unknown error occurred.' };
     }
 }
-
-    
-
-    
