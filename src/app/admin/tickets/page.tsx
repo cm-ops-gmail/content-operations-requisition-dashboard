@@ -31,8 +31,11 @@ const ClientDate = ({ dateString }: { dateString: string }) => {
     }
     
     try {
-        return <>{format(parseISO(dateString), 'yyyy-MM-dd HH:mm')}</>
+        const date = new Date(dateString);
+        // This will format it in the user's local timezone from the ISO string
+        return <>{format(date, 'yyyy-MM-dd HH:mm')}</>
     } catch(e) {
+        // Fallback for invalid date strings
         return <>{dateString}</>;
     }
 }
@@ -163,7 +166,8 @@ export default function AllTicketsPage() {
         setIsDialogOpen(true);
     };
 
-  const canManage = user?.role === 'admin';
+  const isLoggedIn = !!user;
+  const canManageProjects = user?.role === 'admin';
   const statusIndex = headers.indexOf('Status');
   const workTypeIndex = headers.indexOf('Work Type');
   const createdDateIndex = headers.indexOf('Created Date');
@@ -173,7 +177,12 @@ export default function AllTicketsPage() {
     if (createdDateIndex === -1) return true; 
 
     try {
-        const ticketDate = parseISO(row[createdDateIndex]);
+        // The date from the sheet is already BST, we just parse it.
+        // The sheet provides a string like "2024-07-29 11:25:31" which is not ISO 8601
+        // We need to parse it carefully. Assuming it's in local time of the server (or BST)
+        const dateString = row[createdDateIndex];
+        const ticketDate = new Date(dateString.replace(' ', 'T') + 'Z'); // Treat as UTC to avoid timezone shifts
+        
         const start = fromDate ? startOfDay(fromDate) : new Date(0);
         const end = toDate ? endOfDay(toDate) : new Date();
         return isWithinInterval(ticketDate, { start, end });
@@ -215,7 +224,7 @@ export default function AllTicketsPage() {
       <div className="container mx-auto py-8 px-4 md:px-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">All Submitted Tickets</h1>
-          {selectedTicket && canManage && (
+          {selectedTicket && canManageProjects && (
               <Button onClick={handleCreateProject} disabled={isSubmitting}>
                   {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderPlus className="mr-2 h-4 w-4" />}
                   Create Project
@@ -265,7 +274,7 @@ export default function AllTicketsPage() {
                               <Checkbox 
                                   checked={selectedTicket?.rowIndex === rowIndex}
                                   onCheckedChange={() => handleSelectTicket(rowIndex, row)}
-                                  disabled={!canManage}
+                                  disabled={!canManageProjects}
                               />
                           </TableCell>
                           {visibleHeaders.map((header) => {
@@ -278,7 +287,7 @@ export default function AllTicketsPage() {
                                           <Select
                                               defaultValue={cell === 'Open' ? 'Pending' : cell}
                                               onValueChange={(newStatus) => handleStatusChange(rowIndex, newStatus)}
-                                              disabled={!canManage}
+                                              disabled={!isLoggedIn}
                                           >
                                               <SelectTrigger className="w-[150px]">
                                                   <SelectValue />
@@ -338,5 +347,3 @@ export default function AllTicketsPage() {
     </>
   );
 }
-
-    
