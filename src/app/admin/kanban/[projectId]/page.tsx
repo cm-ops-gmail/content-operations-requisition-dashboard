@@ -300,7 +300,7 @@ export default function KanbanPage() {
                   <Badge variant="secondary" className="text-xs">{column.tickets.length}</Badge>
                 </div>
               </div>
-              <Droppable droppableId={column.id}>
+              <Droppable droppableId={column.id} isDropDisabled={!canManage}>
                 {(provided, snapshot) => (
                   <div
                     ref={provided.innerRef}
@@ -308,7 +308,7 @@ export default function KanbanPage() {
                     className={`flex-1 border-l-2 border-r-2 border-b-2 ${column.color.replace('bg-', 'border-').split(" ")[1]} rounded-b-lg p-4 space-y-4 min-h-96 transition-colors ${snapshot.isDraggingOver ? 'bg-muted' : ''}`}
                   >
                     {column.tickets.map((task, index) => (
-                      <Draggable key={task.id} draggableId={task.id} index={index}>
+                      <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={!canManage}>
                         {(provided) => (
                            <Card
                             ref={provided.innerRef}
@@ -357,3 +357,5 @@ export default function KanbanPage() {
     </div>
   );
 }
+
+    
