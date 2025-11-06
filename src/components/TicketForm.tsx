@@ -345,6 +345,12 @@ function ActualForm({ formSchema, defaultValues, formQuestions, workType }: {
         defaultValues: defaultValues,
     });
 
+    function onValidationError() {
+        toast({
+            description: "Please fill out all required fields.",
+        });
+    }
+
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true);
 
@@ -411,7 +417,7 @@ function ActualForm({ formSchema, defaultValues, formQuestions, workType }: {
         <Card className={`transition-all ${getCardClasses()}`}>
             <CardContent className="p-6">
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    <form onSubmit={form.handleSubmit(onSubmit, onValidationError)} className="space-y-6">
                         {formQuestions.map(question => (
                             <FormFieldBuilder key={question.id} question={question} form={form} />
                         ))}
@@ -451,12 +457,19 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
 
             try {
                 const allQuestionsPromises = teams.map(team => getFormQuestions(team));
-                const allQuestions = await Promise.all(allQuestionsPromises);
-                const flattenedQuestions = allQuestions.flat();
+                const allQuestionsArrays = await Promise.all(allQuestionsPromises);
                 
-                const uniqueQuestions = flattenedQuestions.filter((question, index, self) =>
-                    index === self.findIndex((q) => q.questionText === question.questionText)
-                );
+                const questionMap = new Map<string, FormQuestion>();
+                
+                allQuestionsArrays.flat().forEach(question => {
+                    const existing = questionMap.get(question.questionText.replace(/\*$/, '').trim());
+                     // If the new question is required, it takes precedence
+                    if (!existing || (!existing.questionText.endsWith('*') && question.questionText.endsWith('*'))) {
+                        questionMap.set(question.questionText.replace(/\*$/, '').trim(), question);
+                    }
+                });
+
+                const uniqueQuestions = Array.from(questionMap.values());
     
                 const { schema, defaultValues } = generateFormSchemaAndDefaults(uniqueQuestions, teams, workType);
                 
