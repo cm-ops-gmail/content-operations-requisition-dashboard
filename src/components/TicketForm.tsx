@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -343,15 +342,50 @@ function ActualForm({ formSchema, defaultValues, formQuestions, workType }: {
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: defaultValues,
+        mode: 'onSubmit', // Ensure validation happens on submit
+        reValidateMode: 'onChange',
     });
 
-    function onValidationError() {
-        toast({
-            description: "Please fill out all required fields.",
-        });
-    }
-
     async function onSubmit(values: z.infer<typeof formSchema>) {
+        // Trigger validation manually to ensure all fields are validated
+        const isValid = await form.trigger();
+        
+        if (!isValid) {
+            const errors = form.formState.errors;
+            
+            // Collect all error messages
+            const errorList: string[] = [];
+            
+            const collectErrors = (obj: any, prefix = '') => {
+                Object.entries(obj).forEach(([key, value]: [string, any]) => {
+                    const fullKey = prefix ? `${prefix}.${key}` : key;
+                    
+                    if (value?.message) {
+                        // Clean up the field name for display
+                        const fieldLabel = fullKey
+                            .replace(/\*$/, '')
+                            .replace(/\s\((select:|checkbox:).*?\)/i, '')
+                            .replace(/_other$/, ' (Other)');
+                        errorList.push(`• ${fieldLabel}: ${value.message}`);
+                    } else if (typeof value === 'object' && value !== null) {
+                        collectErrors(value, fullKey);
+                    }
+                });
+            };
+            
+            collectErrors(errors);
+            
+            // Show popup with all errors
+            toast({
+                variant: 'destructive',
+                title: 'Please fix the following errors:',
+                description: errorList.length > 0 
+                    ? errorList.join('\n')
+                    : 'Please fill in all required fields.',
+            });
+            return;
+        }
+
         setIsSubmitting(true);
 
         const processedValues: Record<string, any> = { ...values };
@@ -417,7 +451,7 @@ function ActualForm({ formSchema, defaultValues, formQuestions, workType }: {
         <Card className={`transition-all ${getCardClasses()}`}>
             <CardContent className="p-6">
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit, onValidationError)} className="space-y-6">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                         {formQuestions.map(question => (
                             <FormFieldBuilder key={question.id} question={question} form={form} />
                         ))}
@@ -457,19 +491,18 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
 
             try {
                 const allQuestionsPromises = teams.map(team => getFormQuestions(team));
-                const allQuestionsArrays = await Promise.all(allQuestionsPromises);
+                const allQuestions = await Promise.all(allQuestionsPromises);
+                const flattenedQuestions = allQuestions.flat();
                 
-                const questionMap = new Map<string, FormQuestion>();
-                
-                allQuestionsArrays.flat().forEach(question => {
-                    const existing = questionMap.get(question.questionText.replace(/\*$/, '').trim());
-                     // If the new question is required, it takes precedence
-                    if (!existing || (!existing.questionText.endsWith('*') && question.questionText.endsWith('*'))) {
-                        questionMap.set(question.questionText.replace(/\*$/, '').trim(), question);
+                // Use a Map to ensure unique questions by questionText
+                const uniqueQuestionsMap = new Map<string, FormQuestion>();
+                flattenedQuestions.forEach(question => {
+                    if (!uniqueQuestionsMap.has(question.questionText)) {
+                        uniqueQuestionsMap.set(question.questionText, question);
                     }
                 });
-
-                const uniqueQuestions = Array.from(questionMap.values());
+                
+                const uniqueQuestions = Array.from(uniqueQuestionsMap.values());
     
                 const { schema, defaultValues } = generateFormSchemaAndDefaults(uniqueQuestions, teams, workType);
                 
