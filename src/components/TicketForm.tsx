@@ -235,6 +235,9 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
 
 // Function to generate the Zod schema and default values dynamically
 const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[], workType: string) => {
+    console.log('Generating schema for teams:', teams);
+    console.log('Questions:', questions);
+    
     const schemaDefinition: Record<string, any> = {
         'Team': z.string(),
         'Work Type': z.string(),
@@ -248,6 +251,8 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
     questions.forEach(q => {
         const isRequired = q.questionText.endsWith('*');
         const questionKey = q.questionText;
+        
+        console.log(`Processing question: "${questionKey}", Type: ${q.questionType}, Required: ${isRequired}`);
 
         if (q.questionType === 'Checkbox') {
             const checkboxOptions = q.options || [];
@@ -280,7 +285,7 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
             defaultValues[questionKey] = null;
         } else if (q.questionType === 'Select') {
             schemaDefinition[questionKey] = isRequired 
-                ? z.string().min(1, 'This field is required.') 
+                ? z.string().min(1, 'This field is required.')
                 : z.string().optional();
             defaultValues[questionKey] = '';
 
@@ -290,12 +295,16 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
                 defaultValues[otherFieldName] = '';
             }
         } else {
+            // Text, URL, Textarea types
             schemaDefinition[questionKey] = isRequired 
-                ? z.string().min(1, 'This field is required.') 
+                ? z.string().trim().min(1, 'This field is required.')
                 : z.string().optional();
             defaultValues[questionKey] = '';
         }
     });
+    
+    console.log('Schema definition:', schemaDefinition);
+    console.log('Default values:', defaultValues);
     
     // Add validation refinements for 'Other' fields
     const finalSchema = z.object(schemaDefinition).superRefine((data, ctx) => {
@@ -347,8 +356,15 @@ function ActualForm({ formSchema, defaultValues, formQuestions, workType }: {
     });
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
+        console.log('Form submission started');
+        console.log('Form values:', values);
+        console.log('Form questions:', formQuestions);
+        
         // Trigger validation manually to ensure all fields are validated
         const isValid = await form.trigger();
+        
+        console.log('Validation result:', isValid);
+        console.log('Form errors:', form.formState.errors);
         
         if (!isValid) {
             const errors = form.formState.errors;
@@ -367,13 +383,15 @@ function ActualForm({ formSchema, defaultValues, formQuestions, workType }: {
                             .replace(/\s\((select:|checkbox:).*?\)/i, '')
                             .replace(/_other$/, ' (Other)');
                         errorList.push(`• ${fieldLabel}: ${value.message}`);
-                    } else if (typeof value === 'object' && value !== null) {
+                    } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                         collectErrors(value, fullKey);
                     }
                 });
             };
             
             collectErrors(errors);
+            
+            console.log('Error list:', errorList);
             
             // Show popup with all errors
             toast({
@@ -383,6 +401,14 @@ function ActualForm({ formSchema, defaultValues, formQuestions, workType }: {
                     ? errorList.join('\n')
                     : 'Please fill in all required fields.',
             });
+            
+            // Scroll to first error
+            const firstErrorField = Object.keys(errors)[0];
+            if (firstErrorField) {
+                const element = document.querySelector(`[name="${firstErrorField}"]`);
+                element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            
             return;
         }
 
