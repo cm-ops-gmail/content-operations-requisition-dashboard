@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -235,9 +236,6 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
 
 // Function to generate the Zod schema and default values dynamically
 const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[], workType: string) => {
-    console.log('Generating schema for teams:', teams);
-    console.log('Questions:', questions);
-    
     const schemaDefinition: Record<string, any> = {
         'Team': z.string(),
         'Work Type': z.string(),
@@ -251,8 +249,6 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
     questions.forEach(q => {
         const isRequired = q.questionText.endsWith('*');
         const questionKey = q.questionText;
-        
-        console.log(`Processing question: "${questionKey}", Type: ${q.questionType}, Required: ${isRequired}`);
 
         if (q.questionType === 'Checkbox') {
             const checkboxOptions = q.options || [];
@@ -285,7 +281,7 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
             defaultValues[questionKey] = null;
         } else if (q.questionType === 'Select') {
             schemaDefinition[questionKey] = isRequired 
-                ? z.string().min(1, 'This field is required.')
+                ? z.string().min(1, 'This field is required.') 
                 : z.string().optional();
             defaultValues[questionKey] = '';
 
@@ -295,16 +291,12 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
                 defaultValues[otherFieldName] = '';
             }
         } else {
-            // Text, URL, Textarea types
             schemaDefinition[questionKey] = isRequired 
-                ? z.string().trim().min(1, 'This field is required.')
+                ? z.string().min(1, 'This field is required.') 
                 : z.string().optional();
             defaultValues[questionKey] = '';
         }
     });
-    
-    console.log('Schema definition:', schemaDefinition);
-    console.log('Default values:', defaultValues);
     
     // Add validation refinements for 'Other' fields
     const finalSchema = z.object(schemaDefinition).superRefine((data, ctx) => {
@@ -351,67 +343,15 @@ function ActualForm({ formSchema, defaultValues, formQuestions, workType }: {
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: defaultValues,
-        mode: 'onSubmit', // Ensure validation happens on submit
-        reValidateMode: 'onChange',
     });
 
-    async function onSubmit(values: z.infer<typeof formSchema>) {
-        console.log('Form submission started');
-        console.log('Form values:', values);
-        console.log('Form questions:', formQuestions);
-        
-        // Trigger validation manually to ensure all fields are validated
-        const isValid = await form.trigger();
-        
-        console.log('Validation result:', isValid);
-        console.log('Form errors:', form.formState.errors);
-        
-        if (!isValid) {
-            const errors = form.formState.errors;
-            
-            // Collect all error messages
-            const errorList: string[] = [];
-            
-            const collectErrors = (obj: any, prefix = '') => {
-                Object.entries(obj).forEach(([key, value]: [string, any]) => {
-                    const fullKey = prefix ? `${prefix}.${key}` : key;
-                    
-                    if (value?.message) {
-                        // Clean up the field name for display
-                        const fieldLabel = fullKey
-                            .replace(/\*$/, '')
-                            .replace(/\s\((select:|checkbox:).*?\)/i, '')
-                            .replace(/_other$/, ' (Other)');
-                        errorList.push(`• ${fieldLabel}: ${value.message}`);
-                    } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                        collectErrors(value, fullKey);
-                    }
-                });
-            };
-            
-            collectErrors(errors);
-            
-            console.log('Error list:', errorList);
-            
-            // Show popup with all errors
-            toast({
-                variant: 'destructive',
-                title: 'Please fix the following errors:',
-                description: errorList.length > 0 
-                    ? errorList.join('\n')
-                    : 'Please fill in all required fields.',
-            });
-            
-            // Scroll to first error
-            const firstErrorField = Object.keys(errors)[0];
-            if (firstErrorField) {
-                const element = document.querySelector(`[name="${firstErrorField}"]`);
-                element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-            
-            return;
-        }
+    function onValidationError() {
+        toast({
+            description: "Please fill out all required fields.",
+        });
+    }
 
+    async function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true);
 
         const processedValues: Record<string, any> = { ...values };
@@ -477,7 +417,7 @@ function ActualForm({ formSchema, defaultValues, formQuestions, workType }: {
         <Card className={`transition-all ${getCardClasses()}`}>
             <CardContent className="p-6">
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    <form onSubmit={form.handleSubmit(onSubmit, onValidationError)} className="space-y-6">
                         {formQuestions.map(question => (
                             <FormFieldBuilder key={question.id} question={question} form={form} />
                         ))}
@@ -517,18 +457,27 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
 
             try {
                 const allQuestionsPromises = teams.map(team => getFormQuestions(team));
-                const allQuestions = await Promise.all(allQuestionsPromises);
-                const flattenedQuestions = allQuestions.flat();
+                const allQuestionsArrays = await Promise.all(allQuestionsPromises);
                 
-                // Use a Map to ensure unique questions by questionText
-                const uniqueQuestionsMap = new Map<string, FormQuestion>();
-                flattenedQuestions.forEach(question => {
-                    if (!uniqueQuestionsMap.has(question.questionText)) {
-                        uniqueQuestionsMap.set(question.questionText, question);
+                const questionMap = new Map<string, FormQuestion>();
+                
+                // Correctly merge questions, preserving the required status
+                allQuestionsArrays.flat().forEach(question => {
+                    const cleanText = question.questionText.replace(/\*$/, '').trim();
+                    const existing = questionMap.get(cleanText);
+                    
+                    // If we haven't seen this question, add it.
+                    if (!existing) {
+                        questionMap.set(cleanText, question);
+                    } else {
+                        // If the existing one is not required, but the new one is, update it.
+                        if (!existing.questionText.endsWith('*') && question.questionText.endsWith('*')) {
+                            questionMap.set(cleanText, question);
+                        }
                     }
                 });
-                
-                const uniqueQuestions = Array.from(uniqueQuestionsMap.values());
+
+                const uniqueQuestions = Array.from(questionMap.values());
     
                 const { schema, defaultValues } = generateFormSchemaAndDefaults(uniqueQuestions, teams, workType);
                 
@@ -567,3 +516,5 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
 
     return null;
 }
+
+    
