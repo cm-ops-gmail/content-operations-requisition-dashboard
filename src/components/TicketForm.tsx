@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -183,9 +182,6 @@ const FormFieldBuilder = ({ question, form }: { question: FormQuestion, form: Us
                                checked={field.value}
                                onCheckedChange={field.onChange}
                              />
-                           </FormControl>
-                           <FormLabel className="font-normal">
-                             {option}
                            </FormLabel>
                          </FormItem>
                        )}
@@ -298,7 +294,6 @@ const generateFormSchemaAndDefaults = (questions: FormQuestion[], teams: string[
         }
     });
     
-    // Add validation refinements for 'Other' fields
     const finalSchema = z.object(schemaDefinition).superRefine((data, ctx) => {
         questions.forEach(q => {
              if (q.options?.includes('Other')) {
@@ -461,16 +456,13 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
                 
                 const questionMap = new Map<string, FormQuestion>();
                 
-                // Correctly merge questions, preserving the required status
                 allQuestionsArrays.flat().forEach(question => {
                     const cleanText = question.questionText.replace(/\*$/, '').trim();
                     const existing = questionMap.get(cleanText);
                     
-                    // If we haven't seen this question, add it.
                     if (!existing) {
                         questionMap.set(cleanText, question);
                     } else {
-                        // If the existing one is not required, but the new one is, update it.
                         if (!existing.questionText.endsWith('*') && question.questionText.endsWith('*')) {
                             questionMap.set(cleanText, question);
                         }
@@ -516,5 +508,3 @@ export function TicketForm({ teams, workType }: { teams: string[]; workType: str
 
     return null;
 }
-
-    
