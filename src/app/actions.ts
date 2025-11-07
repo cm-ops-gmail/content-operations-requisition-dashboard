@@ -75,9 +75,9 @@ function inferQuestionType(header: string): { type: FormQuestion['questionType']
       const options = optionsMatch ? optionsMatch[1].split(';').map(o => o.trim()) : [];
       return { type: 'Checkbox', options };
     }
-    if (lowerHeader.includes('describe') || lowerHeader.includes('detail')) return { type: 'Textarea', options: [] };
+    if (lowerHeader.includes('(textarea)') || lowerHeader.includes('describe') || lowerHeader.includes('detail')) return { type: 'Textarea', options: [] };
+    if (lowerHeader.includes('(url)') || lowerHeader.includes('link')) return { type: 'Url', options: [] };
     if (lowerHeader.includes('date')) return { type: 'Date', options: [] };
-    if (lowerHeader.includes('url') || lowerHeader.includes('link')) return { type: 'Url', options: [] };
 
     return { type: 'Text', options: [] };
 }
