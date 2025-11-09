@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getAllTickets, createProjectFromTicket, updateTicketStatus } from '@/app/actions';
-import { Loader2, FolderPlus, Calendar as CalendarIcon, Eye, Circle } from 'lucide-react';
+import { Loader2, FolderPlus, Calendar as CalendarIcon, Eye, Circle, Search } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -77,6 +77,7 @@ export default function AllTicketsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fromDate, setFromDate] = useState<Date | undefined>();
   const [toDate, setToDate] = useState<Date | undefined>();
+  const [ticketIdFilter, setTicketIdFilter] = useState('');
   const [selectedTicketDetails, setSelectedTicketDetails] = useState<Record<string, string> | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -171,8 +172,14 @@ export default function AllTicketsPage() {
   const statusIndex = headers.indexOf('Status');
   const workTypeIndex = headers.indexOf('Work Type');
   const createdDateIndex = headers.indexOf('Created Date');
+  const ticketIdIndex = headers.indexOf('Ticket ID');
 
   const filteredTickets = tickets.filter(row => {
+      if (ticketIdIndex !== -1 && ticketIdFilter) {
+        if (!row[ticketIdIndex]?.toLowerCase().includes(ticketIdFilter.toLowerCase())) {
+            return false;
+        }
+    }
     if (!fromDate && !toDate) return true;
     if (createdDateIndex === -1) return true; 
 
@@ -232,8 +239,21 @@ export default function AllTicketsPage() {
           )}
         </div>
          <Card className="mb-6">
-          <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+         <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
+                  <Label htmlFor="search-id">Search by Ticket ID</Label>
+                  <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                          id="search-id"
+                          placeholder="TICKET-..."
+                          value={ticketIdFilter}
+                          onChange={(e) => setTicketIdFilter(e.target.value)}
+                          className="pl-10"
+                      />
+                  </div>
+              </div>
+             <div>
                   <Label htmlFor="from-date">From</Label>
                   <DatePicker date={fromDate} setDate={setFromDate} placeholder="Pick a start date" />
               </div>
