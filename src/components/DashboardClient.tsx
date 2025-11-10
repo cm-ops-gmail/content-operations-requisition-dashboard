@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -8,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { parseISO, isWithinInterval, startOfDay, endOfDay, format } from 'date-fns';
-import { Search, Ticket, CheckCircle2, LoaderCircle, X, Calendar as CalendarIcon, Circle, Eye } from 'lucide-react';
+import { Search, Ticket, CheckCircle2, LoaderCircle, X, Calendar as CalendarIcon, Circle, Eye, Archive, ThumbsUp, Clock, Hourglass } from 'lucide-react';
 import { Button } from './ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
@@ -33,7 +34,8 @@ const ClientDate = ({ dateString }: { dateString: string }) => {
     }
     
     try {
-        return <>{format(parseISO(dateString), 'yyyy-MM-dd HH:mm')}</>
+        const date = new Date(dateString);
+        return <>{format(date, 'yyyy-MM-dd HH:mm')}</>
     } catch(e) {
         return <>{dateString}</>;
     }
@@ -41,13 +43,18 @@ const ClientDate = ({ dateString }: { dateString: string }) => {
 
 const StatusIndicator = ({ status }: { status: string }) => {
     const statusMap: Record<string, { label: string; color: string; icon: JSX.Element }> = {
-        'Open': { label: 'Pending', color: 'bg-yellow-500', icon: <Circle className="h-2.5 w-2.5 text-yellow-500 fill-current" /> },
-        'Pending': { label: 'Pending', color: 'bg-yellow-500', icon: <Circle className="h-2.5 w-2.5 text-yellow-500 fill-current" /> },
+        'In Review': { label: 'In Review', color: 'bg-yellow-500', icon: <Circle className="h-2.5 w-2.5 text-yellow-500 fill-current" /> },
         'In Progress': { label: 'In Progress', color: 'bg-blue-500', icon: <Circle className="h-2.5 w-2.5 text-blue-500 fill-current" /> },
-        'Done': { label: 'Done', color: 'bg-green-500', icon: <Circle className="h-2.5 w-2.5 text-green-500 fill-current" /> },
+        'Prioritized': { label: 'Prioritized', color: 'bg-orange-500', icon: <Circle className="h-2.5 w-2.5 text-orange-500 fill-current" /> },
+        'On Hold': { label: 'On Hold', color: 'bg-gray-500', icon: <Circle className="h-2.5 w-2.5 text-gray-500 fill-current" /> },
+        'Delivered': { label: 'Delivered', color: 'bg-purple-500', icon: <Circle className="h-2.5 w-2.5 text-purple-500 fill-current" /> },
+        'Completed': { label: 'Completed', color: 'bg-green-500', icon: <Circle className="h-2.5 w-2.5 text-green-500 fill-current" /> },
+        'Open': { label: 'In Review', color: 'bg-yellow-500', icon: <Circle className="h-2.5 w-2.5 text-yellow-500 fill-current" /> },
+        'Done': { label: 'Completed', color: 'bg-green-500', icon: <Circle className="h-2.5 w-2.5 text-green-500 fill-current" /> },
     };
 
-    const currentStatus = statusMap[status] || { label: status, color: 'bg-gray-500', icon: <Circle className="h-2.5 w-2.5 text-gray-500 fill-current" /> };
+    const currentStatusKey = status === 'Open' ? 'In Review' : status;
+    const currentStatus = statusMap[currentStatusKey] || { label: status, color: 'bg-gray-500', icon: <Circle className="h-2.5 w-2.5 text-gray-500 fill-current" /> };
 
     return (
         <Badge variant="outline" className="flex items-center gap-2 capitalize">
@@ -84,6 +91,31 @@ const VISIBLE_COLUMNS = [
   'Your Email*',
 ];
 
+const statusMessages: Record<string, { message: string, icon: React.ReactNode, color: string }> = {
+    'In Review': { message: "Your ticket is in review. We will process it shortly.", icon: <Eye className="h-5 w-5" />, color: "text-yellow-500" },
+    'In Progress': { message: "Work on your ticket has started. You will be notified of any updates.", icon: <LoaderCircle className="h-5 w-5" />, color: "text-blue-500" },
+    'Prioritized': { message: "Your ticket has been prioritized and will be addressed soon.", icon: <Archive className="h-5 w-5" />, color: "text-orange-500" },
+    'On Hold': { message: "Your ticket is temporarily on hold. We will resume work as soon as possible.", icon: <Hourglass className="h-5 w-5" />, color: "text-gray-500" },
+    'Delivered': { message: "The work for your ticket has been delivered.", icon: <ThumbsUp className="h-5 w-5" />, color: "text-purple-500" },
+    'Completed': { message: "Your ticket has been resolved and completed.", icon: <CheckCircle2 className="h-5 w-5" />, color: "text-green-500" },
+};
+
+const StatusHeader = ({ status }: { status: string }) => {
+    const currentStatus = status === 'Open' ? 'In Review' : status;
+    const details = statusMessages[currentStatus] || { message: `Current status: ${currentStatus}`, icon: <Circle className="h-5 w-5" />, color: 'text-muted-foreground' };
+    return (
+        <div className="p-4 rounded-lg border bg-muted/50 mb-4">
+            <div className="flex items-center gap-3">
+                <div className={details.color}>{details.icon}</div>
+                <div>
+                    <p className={`font-semibold ${details.color}`}>{currentStatus}</p>
+                    <p className="text-sm text-muted-foreground">{details.message}</p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 export function DashboardClient({ tickets, headers, teams, statuses, workTypes }: DashboardClientProps) {
   const [fromDate, setFromDate] = useState<Date | undefined>();
@@ -92,7 +124,7 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
   const [teamFilter, setTeamFilter] = useState('All');
   const [workTypeFilter, setWorkTypeFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTicketDetails, setSelectedTicketDetails] = useState<Record<string, string> | null>(null);
+  const [selectedTicketDetails, setSelectedTicketDetails] = useState<{ details: Record<string, string>, status: string, ticketId: string } | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const visibleHeaders = useMemo(() => {
@@ -120,7 +152,8 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
         if (!fromDate && !toDate) return true;
         if (createdDateIndex === -1) return true;
         try {
-            const ticketDate = parseISO(row[createdDateIndex]);
+            const dateString = row[createdDateIndex];
+            const ticketDate = new Date(dateString.replace(' ', 'T') + 'Z');
             const start = fromDate ? startOfDay(fromDate) : new Date(0);
             const end = toDate ? endOfDay(toDate) : new Date();
             return isWithinInterval(ticketDate, { start, end });
@@ -130,7 +163,7 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
     })();
     
     // Status filter
-    const hasStatus = statusFilter === 'All' || (statusIndex !== -1 && (row[statusIndex] === statusFilter || (statusFilter === 'Pending' && row[statusIndex] === 'Open')));
+    const hasStatus = statusFilter === 'All' || (statusIndex !== -1 && (row[statusIndex] === statusFilter || (statusFilter === 'In Review' && row[statusIndex] === 'Open')));
 
     // Team filter
     const hasTeam = teamFilter === 'All' || (teamIndex !== -1 && (row[teamIndex] || '').split(', ').includes(teamFilter));
@@ -144,15 +177,21 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
   const stats = useMemo(() => {
     return filteredTickets.reduce((acc, ticket) => {
         const status = statusIndex !== -1 ? ticket[statusIndex] : '';
-        if (status === 'Done') {
-            acc.solved++;
-        } else if (status === 'In Progress') {
-            acc.inProgress++;
-        } else if (status === 'Open' || status === 'Pending') {
-            acc.pending++;
-        }
+        if (status === 'In Review' || status === 'Open') acc.inReview++;
+        if (status === 'In Progress') acc.inProgress++;
+        if (status === 'Prioritized') acc.prioritized++;
+        if (status === 'On Hold') acc.onHold++;
+        if (status === 'Delivered') acc.delivered++;
+        if (status === 'Completed' || status === 'Done') acc.completed++;
         return acc;
-    }, { total: filteredTickets.length, solved: 0, inProgress: 0, pending: 0 });
+    }, { 
+        inReview: 0,
+        inProgress: 0,
+        prioritized: 0,
+        onHold: 0,
+        delivered: 0,
+        completed: 0,
+    });
   }, [filteredTickets, statusIndex]);
   
   const handleClearFilters = () => {
@@ -171,17 +210,23 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
         }
         return acc;
     }, {} as Record<string, string>);
-    setSelectedTicketDetails(details);
+
+    const status = row[statusIndex] || 'N/A';
+    const ticketId = row[ticketIdIndex] || 'N/A';
+
+    setSelectedTicketDetails({ details, status, ticketId });
     setIsDialogOpen(true);
   }
 
   const isAnyFilterActive = searchQuery || fromDate || toDate || statusFilter !== 'All' || teamFilter !== 'All' || workTypeFilter !== 'All';
 
   const statsCards = [
-    { title: 'Total Tickets', value: stats.total.toString(), icon: <Ticket className="h-8 w-8 text-primary" />, color: "text-primary" },
-    { title: 'Pending', value: stats.pending.toString(), icon: <LoaderCircle className="h-8 w-8 text-yellow-500" />, color: "text-yellow-500" },
+    { title: 'In Review', value: stats.inReview.toString(), icon: <Eye className="h-8 w-8 text-yellow-500" />, color: "text-yellow-500" },
     { title: 'In Progress', value: stats.inProgress.toString(), icon: <LoaderCircle className="h-8 w-8 text-blue-500" />, color: "text-blue-500" },
-    { title: 'Tickets Solved', value: stats.solved.toString(), icon: <CheckCircle2 className="h-8 w-8 text-green-500" />, color: "text-green-500" },
+    { title: 'Prioritized', value: stats.prioritized.toString(), icon: <Archive className="h-8 w-8 text-orange-500" />, color: "text-orange-500" },
+    { title: 'On Hold', value: stats.onHold.toString(), icon: <Hourglass className="h-8 w-8 text-gray-500" />, color: "text-gray-500" },
+    { title: 'Delivered', value: stats.delivered.toString(), icon: <ThumbsUp className="h-8 w-8 text-purple-500" />, color: "text-purple-500" },
+    { title: 'Completed', value: stats.completed.toString(), icon: <CheckCircle2 className="h-8 w-8 text-green-500" />, color: "text-green-500" },
   ];
   
   const DatePicker = ({ date, setDate, placeholder }: { date?: Date; setDate: (date?: Date) => void; placeholder: string; }) => (
@@ -213,7 +258,7 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
     <>
       <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         {statsCards.map((stat) => (
             <Card key={stat.title} className="rounded-xl transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 p-6">
@@ -350,18 +395,21 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
               <DialogContent className="max-w-2xl">
                  <DialogHeader>
                     <DialogTitle>Ticket Details</DialogTitle>
-                    <DialogDescription>Full details of the selected ticket.</DialogDescription>
+                    <DialogDescription>Full details for ticket {selectedTicketDetails?.ticketId}</DialogDescription>
                  </DialogHeader>
                  {selectedTicketDetails && (
-                    <div className="mt-4 max-h-[60vh] overflow-y-auto pr-4">
-                        <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                           {Object.entries(selectedTicketDetails).map(([key, value]) => (
-                                <div key={key} className="border-b pb-2">
-                                    <dt className="text-sm font-medium text-muted-foreground">{key}</dt>
-                                    <dd className="mt-1 text-sm text-foreground">{value}</dd>
-                                </div>
-                           ))}
-                        </dl>
+                    <div className="mt-4">
+                        <StatusHeader status={selectedTicketDetails.status} />
+                        <div className="max-h-[50vh] overflow-y-auto pr-4">
+                            <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                            {Object.entries(selectedTicketDetails.details).map(([key, value]) => (
+                                    <div key={key} className="border-b pb-2">
+                                        <dt className="text-sm font-medium text-muted-foreground">{key}</dt>
+                                        <dd className="mt-1 text-sm text-foreground">{value}</dd>
+                                    </div>
+                            ))}
+                            </dl>
+                        </div>
                     </div>
                  )}
               </DialogContent>
@@ -371,5 +419,3 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
     </>
   );
 }
-
-    
