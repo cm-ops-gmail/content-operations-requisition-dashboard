@@ -91,7 +91,7 @@ export default function AdminPage() {
   const handleOpenQuestionDialog = (question: FormQuestion | null = null) => {
     setEditingQuestion(question);
     if (question) {
-        const cleanText = question.questionText.replace(/\*$/, '').replace(/\s\((select:|checkbox:|url|textarea)\)/i, '');
+        const cleanText = question.questionText.replace(/\s*\((select|checkbox|url|textarea):.*?\)\s*|\*$/gi, '').trim();
         setNewQuestionText(cleanText);
         setNewQuestionType(question.questionType);
         setIsQuestionRequired(question.questionText.endsWith('*'));
@@ -119,7 +119,8 @@ export default function AdminPage() {
     e.preventDefault();
     setIsSubmitting(true);
     
-    let finalQuestionText = newQuestionText;
+    // Start with the clean question text
+    let finalQuestionText = newQuestionText.trim();
     
     if (newQuestionType === 'Select') {
       const options = selectOptions.split(';').map(o => o.trim()).filter(Boolean);
@@ -131,7 +132,7 @@ export default function AdminPage() {
       if (options.length > 0) {
         finalQuestionText += ` (Checkbox: ${options.join(';')})`;
       }
-      } else if (newQuestionType === 'Textarea') {
+    } else if (newQuestionType === 'Textarea') {
         finalQuestionText += ' (textarea)';
     } else if (newQuestionType === 'Url') {
         finalQuestionText += ' (url)';
@@ -386,7 +387,7 @@ export default function AdminPage() {
               <TableBody>
                 {formQuestions.map((question) => (
                   <TableRow key={question.id}>
-                    <TableCell className="font-medium">{question.questionText.replace(/\*$/, '').replace(/\s\((select:|checkbox:|url|textarea)\)/i, '')}</TableCell>
+                    <TableCell className="font-medium">{question.questionText.replace(/\s*\((select|checkbox|url|textarea):.*?\)\s*|\*$/gi, '').trim()}</TableCell>
                     <TableCell>{question.questionType}</TableCell>
                     <TableCell>{question.questionText.endsWith('*') ? 'Yes' : 'No'}</TableCell>
                     <TableCell className="text-right">
@@ -430,4 +431,6 @@ export default function AdminPage() {
     </>
   );
 }
+    
+
     
