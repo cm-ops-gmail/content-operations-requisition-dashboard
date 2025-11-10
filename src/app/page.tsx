@@ -17,24 +17,12 @@ async function getDashboardData() {
     let tickets: string[][] = [];
     let ticketHeaders: string[] = [];
     let teams: string[] = [];
-    let statuses: string[] = [];
+    let statuses: string[] = ["All", "In Review", "In Progress", "Prioritized", "On Hold", "Delivered", "Completed"];
     let workTypes: string[] = [];
 
     if (ticketData.values && ticketData.values.length > 0) {
         ticketHeaders = ticketData.values[0];
         tickets = ticketData.values.slice(1).reverse();
-        const statusIndex = ticketHeaders.indexOf('Status');
-        
-        const uniqueStatuses = new Set<string>();
-        
-        if (statusIndex !== -1) {
-            tickets.forEach(ticket => {
-                let status = ticket[statusIndex];
-                if (status === 'Open') status = 'Pending';
-                if (status) uniqueStatuses.add(status);
-            });
-        }
-        statuses = ['All', ...Array.from(uniqueStatuses)];
     }
     
     if (teamsData && teamsData.length > 0) {
@@ -53,7 +41,7 @@ async function getDashboardData() {
         tickets: [],
         ticketHeaders: [],
         teams: ['All'],
-        statuses: ['All'],
+        statuses: ["All", "In Review", "In Progress", "Prioritized", "On Hold", "Delivered", "Completed"],
         workTypes: ['All']
     };
   }
@@ -87,3 +75,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
