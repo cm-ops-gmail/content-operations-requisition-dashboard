@@ -56,7 +56,7 @@ export async function submitTicket(data: Record<string, any>) {
         ...data,
         'Ticket ID': `TICKET-${Date.now()}`,
         'Created Date': formattedBstDate,
-        'Status': 'Open'
+        'Status': 'In Review'
     };
     return await appendRow(dataWithTimestamp, 'Tickets');
 }
