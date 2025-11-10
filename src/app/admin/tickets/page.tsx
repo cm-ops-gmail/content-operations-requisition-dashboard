@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getAllTickets, createProjectFromTicket, updateTicketStatus } from '@/app/actions';
-import { Loader2, FolderPlus, Calendar as CalendarIcon, Eye, Circle, Search } from 'lucide-react';
+import { Loader2, FolderPlus, Calendar as CalendarIcon, Eye, Circle, Search, CheckCircle2, Archive, ThumbsUp, Clock, Hourglass, LoaderCircle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -66,6 +66,31 @@ const VISIBLE_COLUMNS = [
   'Your Email*',
 ];
 
+const statusMessages: Record<string, { message: string, icon: React.ReactNode, color: string }> = {
+    'In Review': { message: "Your ticket is in review. We will process it shortly.", icon: <Eye className="h-5 w-5" />, color: "text-yellow-500" },
+    'In Progress': { message: "Work on your ticket has started. You will be notified of any updates.", icon: <LoaderCircle className="h-5 w-5" />, color: "text-blue-500" },
+    'Prioritized': { message: "Your ticket has been prioritized and will be addressed soon.", icon: <Archive className="h-5 w-5" />, color: "text-orange-500" },
+    'On Hold': { message: "Your ticket is temporarily on hold. We will resume work as soon as possible.", icon: <Hourglass className="h-5 w-5" />, color: "text-gray-500" },
+    'Delivered': { message: "The work for your ticket has been delivered.", icon: <ThumbsUp className="h-5 w-5" />, color: "text-purple-500" },
+    'Completed': { message: "Your ticket has been resolved and completed.", icon: <CheckCircle2 className="h-5 w-5" />, color: "text-green-500" },
+};
+
+const StatusHeader = ({ status }: { status: string }) => {
+    const currentStatus = status === 'Open' ? 'In Review' : status;
+    const details = statusMessages[currentStatus] || { message: `Current status: ${currentStatus}`, icon: <Circle className="h-5 w-5" />, color: 'text-muted-foreground' };
+    return (
+        <div className="p-4 rounded-lg border bg-muted/50 mb-4">
+            <div className="flex items-center gap-3">
+                <div className={details.color}>{details.icon}</div>
+                <div>
+                    <p className={`font-semibold ${details.color}`}>{currentStatus}</p>
+                    <p className="text-sm text-muted-foreground">{details.message}</p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 export default function AllTicketsPage() {
   const { user } = useAuth();
@@ -78,7 +103,7 @@ export default function AllTicketsPage() {
   const [fromDate, setFromDate] = useState<Date | undefined>();
   const [toDate, setToDate] = useState<Date | undefined>();
   const [ticketIdFilter, setTicketIdFilter] = useState('');
-  const [selectedTicketDetails, setSelectedTicketDetails] = useState<Record<string, string> | null>(null);
+  const [selectedTicketDetails, setSelectedTicketDetails] = useState<{ details: Record<string, string>, status: string, ticketId: string } | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const { toast } = useToast();
@@ -163,7 +188,11 @@ export default function AllTicketsPage() {
             }
             return acc;
         }, {} as Record<string, string>);
-        setSelectedTicketDetails(details);
+        
+        const status = row[statusIndex] || 'N/A';
+        const ticketId = row[ticketIdIndex] || 'N/A';
+
+        setSelectedTicketDetails({ details, status, ticketId });
         setIsDialogOpen(true);
     };
 
@@ -174,8 +203,9 @@ export default function AllTicketsPage() {
   const createdDateIndex = headers.indexOf('Created Date');
   const ticketIdIndex = headers.indexOf('Ticket ID');
 
+
   const filteredTickets = tickets.filter(row => {
-      if (ticketIdIndex !== -1 && ticketIdFilter) {
+    if (ticketIdIndex !== -1 && ticketIdFilter) {
         if (!row[ticketIdIndex]?.toLowerCase().includes(ticketIdFilter.toLowerCase())) {
             return false;
         }
@@ -184,11 +214,8 @@ export default function AllTicketsPage() {
     if (createdDateIndex === -1) return true; 
 
     try {
-        // The date from the sheet is already BST, we just parse it.
-        // The sheet provides a string like "2024-07-29 11:25:31" which is not ISO 8601
-        // We need to parse it carefully. Assuming it's in local time of the server (or BST)
         const dateString = row[createdDateIndex];
-        const ticketDate = new Date(dateString.replace(' ', 'T') + 'Z'); // Treat as UTC to avoid timezone shifts
+        const ticketDate = new Date(dateString.replace(' ', 'T') + 'Z');
         
         const start = fromDate ? startOfDay(fromDate) : new Date(0);
         const end = toDate ? endOfDay(toDate) : new Date();
@@ -239,7 +266,7 @@ export default function AllTicketsPage() {
           )}
         </div>
          <Card className="mb-6">
-         <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                   <Label htmlFor="search-id">Search by Ticket ID</Label>
                   <div className="relative">
@@ -253,7 +280,7 @@ export default function AllTicketsPage() {
                       />
                   </div>
               </div>
-             <div>
+              <div>
                   <Label htmlFor="from-date">From</Label>
                   <DatePicker date={fromDate} setDate={setFromDate} placeholder="Pick a start date" />
               </div>
@@ -292,8 +319,8 @@ export default function AllTicketsPage() {
                       <TableRow key={rowIndex}>
                           <TableCell>
                               <Checkbox 
-                                  checked={selectedTicket?.rowIndex === rowIndex}
-                                  onCheckedChange={() => handleSelectTicket(rowIndex, row)}
+                                  checked={selectedTicket?.rowIndex === tickets.indexOf(row)}
+                                  onCheckedChange={() => handleSelectTicket(tickets.indexOf(row), row)}
                                   disabled={!canManageProjects}
                               />
                           </TableCell>
@@ -305,17 +332,20 @@ export default function AllTicketsPage() {
                                   return (
                                       <TableCell key={header}>
                                           <Select
-                                              defaultValue={cell === 'Open' ? 'Pending' : cell}
-                                              onValueChange={(newStatus) => handleStatusChange(rowIndex, newStatus)}
+                                              defaultValue={cell === 'Open' ? 'In Review' : cell}
+                                              onValueChange={(newStatus) => handleStatusChange(tickets.indexOf(row), newStatus)}
                                               disabled={!isLoggedIn}
                                           >
                                               <SelectTrigger className="w-[150px]">
                                                   <SelectValue />
                                               </SelectTrigger>
                                               <SelectContent>
-                                                  <SelectItem value="Pending">Pending</SelectItem>
+                                                  <SelectItem value="In Review">In Review</SelectItem>
                                                   <SelectItem value="In Progress">In Progress</SelectItem>
-                                                  <SelectItem value="Done">Done</SelectItem>
+                                                  <SelectItem value="Prioritized">Prioritized</SelectItem>
+                                                  <SelectItem value="On Hold">On Hold</SelectItem>
+                                                  <SelectItem value="Delivered">Delivered</SelectItem>
+                                                  <SelectItem value="Completed">Completed</SelectItem>
                                               </SelectContent>
                                           </Select>
                                       </TableCell>
@@ -327,7 +357,7 @@ export default function AllTicketsPage() {
                                if (cellIndex === createdDateIndex) {
                                   return <TableCell key={header}><ClientDate dateString={cell} /></TableCell>
                                }
-                              return <TableCell key={header}>{cell === 'Open' ? 'Pending' : cell}</TableCell>
+                              return <TableCell key={header}>{cell === 'Open' ? 'In Review' : cell}</TableCell>
                           })}
                           <TableCell>
                               <Button variant="outline" size="sm" onClick={() => handleViewDetails(row)}>
@@ -348,18 +378,21 @@ export default function AllTicketsPage() {
           <DialogContent className="max-w-2xl">
              <DialogHeader>
                 <DialogTitle>Ticket Details</DialogTitle>
-                <DialogDescription>Full details of the selected ticket.</DialogDescription>
+                <DialogDescription>Full details for ticket {selectedTicketDetails?.ticketId}</DialogDescription>
              </DialogHeader>
              {selectedTicketDetails && (
-                <div className="mt-4 max-h-[60vh] overflow-y-auto pr-4">
+                <div className="mt-4">
+                   <StatusHeader status={selectedTicketDetails.status} />
+                   <div className="max-h-[50vh] overflow-y-auto pr-4">
                     <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                       {Object.entries(selectedTicketDetails).map(([key, value]) => (
+                       {Object.entries(selectedTicketDetails.details).map(([key, value]) => (
                             <div key={key} className="border-b pb-2">
                                 <dt className="text-sm font-medium text-muted-foreground">{key}</dt>
                                 <dd className="mt-1 text-sm text-foreground">{value}</dd>
                             </div>
                        ))}
                     </dl>
+                   </div>
                 </div>
              )}
           </DialogContent>
@@ -367,3 +400,5 @@ export default function AllTicketsPage() {
     </>
   );
 }
+
+
