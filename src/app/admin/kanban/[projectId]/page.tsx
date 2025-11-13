@@ -19,6 +19,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 
 type ColumnId = 'todo' | 'inprogress' | 'review' | 'done';
 
@@ -150,7 +153,7 @@ export default function KanbanPage() {
             type: task.type,
             priority: task.priority,
             assignee: task.assignee,
-            dueDate: task.dueDate ? format(parseISO(task.dueDate), 'yyyy-MM-dd') : '',
+            dueDate: task.dueDate,
             tags: task.tags
         });
     } else {
@@ -171,9 +174,15 @@ export default function KanbanPage() {
     
     let result;
     if (editingTask) {
-        result = await updateKanbanTask(editingTask.sheetRowIndex, taskForm);
+        result = await updateKanbanTask(editingTask.sheetRowIndex, {
+            ...taskForm,
+            dueDate: taskForm.dueDate ? new Date(taskForm.dueDate).toISOString() : ''
+        });
     } else {
-        result = await addKanbanTask(projectId, taskForm);
+        result = await addKanbanTask(projectId, {
+            ...taskForm,
+            dueDate: taskForm.dueDate ? new Date(taskForm.dueDate).toISOString() : ''
+        });
     }
     
     if (result.success) {
@@ -297,7 +306,31 @@ export default function KanbanPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                        <div><Label>Assign To</Label><Select value={taskForm.assignee} onValueChange={(v) => setTaskForm(p => ({ ...p, assignee: v }))}><SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger><SelectContent>{members.map((m) => (<SelectItem key={`${m[0]}-${m[1]}`} value={m[0]}>{m[0]} ({m[1]})</SelectItem>))}</SelectContent></Select></div>
-                       <div><Label>Due Date</Label><Input type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm(p => ({ ...p, dueDate: e.target.value }))} /></div>
+                        <div>
+                          <Label>Due Date</Label>
+                           <Popover>
+                              <PopoverTrigger asChild>
+                                  <Button
+                                      variant={"outline"}
+                                      className={cn(
+                                          "w-full justify-start text-left font-normal",
+                                          !taskForm.dueDate && "text-muted-foreground"
+                                      )}
+                                  >
+                                      <Calendar className="mr-2 h-4 w-4" />
+                                      {taskForm.dueDate ? format(parseISO(taskForm.dueDate), "PPP") : <span>Pick a date</span>}
+                                  </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0">
+                                  <CalendarComponent
+                                      mode="single"
+                                      selected={taskForm.dueDate ? new Date(taskForm.dueDate) : undefined}
+                                      onSelect={(date) => setTaskForm(p => ({...p, dueDate: date ? date.toISOString() : ''}))}
+                                      initialFocus
+                                  />
+                              </PopoverContent>
+                          </Popover>
+                       </div>
                     </div>
                   </div>
                   <DialogFooter>
@@ -390,7 +423,5 @@ export default function KanbanPage() {
     </div>
   );
 }
-
-    
 
     
