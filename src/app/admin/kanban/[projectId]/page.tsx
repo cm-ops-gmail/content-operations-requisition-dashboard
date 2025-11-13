@@ -6,9 +6,9 @@ import { useParams } from 'next/navigation';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getKanbanTasks, getMembers, addKanbanTask, updateKanbanTaskStatus, deleteKanbanTask } from '@/app/actions';
+import { getKanbanTasks, getMembers, addKanbanTask, updateKanbanTask, updateKanbanTaskStatus, deleteKanbanTask } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Search, Users, Calendar, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Search, Users, Calendar, Trash2, Edit } from 'lucide-react';
 import type { KanbanTask } from '@/lib/mock-data';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -39,12 +39,13 @@ export default function KanbanPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingTask, setEditingTask] = useState<KanbanTask | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTeam, setSelectedTeam] = useState('all');
   const [selectedPriority, setSelectedPriority] = useState('all');
 
-  const [newTask, setNewTask] = useState({
+  const [taskForm, setTaskForm] = useState({
     title: '',
     description: '',
     type: 'Promotional',
@@ -140,23 +141,47 @@ export default function KanbanPage() {
     }
   };
   
-  const handleAddTask = async (e: FormEvent) => {
+  const handleOpenDialog = (task: KanbanTask | null = null) => {
+    setEditingTask(task);
+    if (task) {
+        setTaskForm({
+            title: task.title,
+            description: task.description,
+            type: task.type,
+            priority: task.priority,
+            assignee: task.assignee,
+            dueDate: task.dueDate ? format(parseISO(task.dueDate), 'yyyy-MM-dd') : '',
+            tags: task.tags
+        });
+    } else {
+        setTaskForm({
+            title: '', description: '', type: 'Promotional', priority: 'Medium', assignee: '', dueDate: '', tags: []
+        });
+    }
+    setIsDialogOpen(true);
+  }
+
+  const handleFormSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newTask.title.trim()) {
+    if (!taskForm.title.trim()) {
         toast({ variant: 'destructive', title: 'Error', description: 'Task title is required.' });
         return;
     }
     setIsSubmitting(true);
-
-    const result = await addKanbanTask(projectId, newTask);
+    
+    let result;
+    if (editingTask) {
+        result = await updateKanbanTask(editingTask.sheetRowIndex, taskForm);
+    } else {
+        result = await addKanbanTask(projectId, taskForm);
+    }
     
     if (result.success) {
-      toast({ title: 'Task Added!', description: `"${newTask.title}" has been added to the board.` });
-      setNewTask({ title: '', description: '', type: 'Promotional', priority: 'Medium', assignee: '', dueDate: '', tags: [] });
+      toast({ title: `Task ${editingTask ? 'Updated' : 'Added'}!`, description: `"${taskForm.title}" has been saved.` });
       setIsDialogOpen(false);
       await fetchData();
     } else {
-      toast({ variant: 'destructive', title: 'Error', description: result.error || 'Failed to add task.' });
+      toast({ variant: 'destructive', title: 'Error', description: result.error || 'Failed to save task.' });
     }
     setIsSubmitting(false);
   };
@@ -256,28 +281,28 @@ export default function KanbanPage() {
             {canManage && (
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button>
+                <Button onClick={() => handleOpenDialog()}>
                   <Plus className="mr-2 h-4 w-4" /> Add Task
                 </Button>
               </DialogTrigger>
               <DialogContent>
-                <DialogHeader><DialogTitle>Add New Task</DialogTitle></DialogHeader>
-                <form onSubmit={handleAddTask}>
+                <DialogHeader><DialogTitle>{editingTask ? 'Edit Task' : 'Add New Task'}</DialogTitle></DialogHeader>
+                <form onSubmit={handleFormSubmit}>
                   <div className="space-y-4 py-4">
-                    <div><Label>Task Title</Label><Input value={newTask.title} onChange={(e) => setNewTask(p => ({ ...p, title: e.target.value }))} placeholder="Enter task title" /></div>
-                    <div><Label>Description</Label><Textarea value={newTask.description} onChange={(e) => setNewTask(p => ({ ...p, description: e.target.value }))} placeholder="Enter task description" /></div>
+                    <div><Label>Task Title</Label><Input value={taskForm.title} onChange={(e) => setTaskForm(p => ({ ...p, title: e.target.value }))} placeholder="Enter task title" /></div>
+                    <div><Label>Description</Label><Textarea value={taskForm.description} onChange={(e) => setTaskForm(p => ({ ...p, description: e.target.value }))} placeholder="Enter task description" /></div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div><Label>Type</Label><Select value={newTask.type} onValueChange={(v) => setNewTask(p => ({ ...p, type: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Promotional">Promotional</SelectItem><SelectItem value="Paid">Paid</SelectItem><SelectItem value="Recorded">Recorded</SelectItem></SelectContent></Select></div>
-                      <div><Label>Priority</Label><Select value={newTask.priority} onValueChange={(v) => setNewTask(p => ({ ...p, priority: v as KanbanTask['priority'] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Low">Low</SelectItem><SelectItem value="Medium">Medium</SelectItem><SelectItem value="High">High</SelectItem><SelectItem value="Critical">Critical</SelectItem></SelectContent></Select></div>
+                      <div><Label>Type</Label><Select value={taskForm.type} onValueChange={(v) => setTaskForm(p => ({ ...p, type: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Promotional">Promotional</SelectItem><SelectItem value="Paid">Paid</SelectItem><SelectItem value="Recorded">Recorded</SelectItem></SelectContent></Select></div>
+                      <div><Label>Priority</Label><Select value={taskForm.priority} onValueChange={(v) => setTaskForm(p => ({ ...p, priority: v as KanbanTask['priority'] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Low">Low</SelectItem><SelectItem value="Medium">Medium</SelectItem><SelectItem value="High">High</SelectItem><SelectItem value="Critical">Critical</SelectItem></SelectContent></Select></div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                       <div><Label>Assign To</Label><Select value={newTask.assignee} onValueChange={(v) => setNewTask(p => ({ ...p, assignee: v }))}><SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger><SelectContent>{members.map((m) => (<SelectItem key={`${m[0]}-${m[1]}`} value={m[0]}>{m[0]} ({m[1]})</SelectItem>))}</SelectContent></Select></div>
-                       <div><Label>Due Date</Label><Input type="date" value={newTask.dueDate} onChange={(e) => setNewTask(p => ({ ...p, dueDate: e.target.value }))} /></div>
+                       <div><Label>Assign To</Label><Select value={taskForm.assignee} onValueChange={(v) => setTaskForm(p => ({ ...p, assignee: v }))}><SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger><SelectContent>{members.map((m) => (<SelectItem key={`${m[0]}-${m[1]}`} value={m[0]}>{m[0]} ({m[1]})</SelectItem>))}</SelectContent></Select></div>
+                       <div><Label>Due Date</Label><Input type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm(p => ({ ...p, dueDate: e.target.value }))} /></div>
                     </div>
                   </div>
                   <DialogFooter>
                     <Button variant="outline" type="button" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                    <Button type="submit" disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Add Task</Button>
+                    <Button type="submit" disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editingTask ? 'Save Changes' : 'Add Task'}</Button>
                   </DialogFooter>
                 </form>
               </DialogContent>
@@ -314,20 +339,28 @@ export default function KanbanPage() {
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            className="hover:shadow-md transition-shadow bg-card cursor-move"
+                            className="hover:shadow-md transition-shadow bg-card cursor-move relative group"
                           >
-                           <CardHeader className="pb-3">
+                           <CardHeader className="pb-3 pr-12">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
+                                <div className="absolute top-2 left-2 h-6 w-6 flex items-center justify-center bg-muted-foreground/10 text-muted-foreground rounded-full text-xs font-bold">
+                                    {index + 1}
+                                </div>
+                                <div className="flex items-center gap-2 mb-2 pl-8">
                                     <Badge variant="outline" className={getPriorityColor(task.priority)}>{task.priority}</Badge>
                                 </div>
-                                <CardTitle className="text-sm font-medium leading-tight">{task.title}</CardTitle>
+                                <CardTitle className="text-sm font-medium leading-tight pl-8">{task.title}</CardTitle>
                               </div>
                               {canManage && (
-                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(task)}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="absolute top-2 right-2 flex flex-col items-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleOpenDialog(task)}>
+                                        <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(task)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                               )}
                             </div>
                            </CardHeader>
@@ -357,5 +390,7 @@ export default function KanbanPage() {
     </div>
   );
 }
+
+    
 
     
