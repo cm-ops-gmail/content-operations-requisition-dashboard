@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getAllTickets, createProjectFromTicket, updateTicketStatus } from '@/app/actions';
+import { getAllTickets, createProjectFromTicket, updateTicketStatus, getProjects } from '@/app/actions';
 import { Loader2, FolderPlus, Calendar as CalendarIcon, Eye, Circle, Search, CheckCircle2, Archive, ThumbsUp, Clock, Hourglass, LoaderCircle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
@@ -97,6 +97,7 @@ export default function AllTicketsPage() {
   const { user } = useAuth();
   const [tickets, setTickets] = useState<string[][]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
+  const [existingProjectTicketIds, setExistingProjectTicketIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedTicket, setSelectedTicket] = useState<{rowIndex: number, values: string[]} | null>(null);
@@ -116,14 +117,25 @@ export default function AllTicketsPage() {
     setIsLoading(true);
     setError('');
     try {
-      const sheetData = await getAllTickets();
-      if (sheetData && sheetData.values && sheetData.values.length > 0) {
-        setHeaders(sheetData.values[0]);
-        setTickets(sheetData.values.slice(1).reverse());
+      const [ticketData, projectData] = await Promise.all([getAllTickets(), getProjects()]);
+
+      if (ticketData && ticketData.values && ticketData.values.length > 0) {
+        setHeaders(ticketData.values[0]);
+        setTickets(ticketData.values.slice(1).reverse());
       } else {
         setHeaders([]);
         setTickets([]);
       }
+      
+      if (projectData && projectData.values && projectData.values.length > 0) {
+        const projectHeaders = projectData.values[0];
+        const ticketIdColIndex = projectHeaders.indexOf('Ticket ID');
+        if (ticketIdColIndex !== -1) {
+            const ids = new Set(projectData.values.slice(1).map(p => p[ticketIdColIndex]).filter(Boolean));
+            setExistingProjectTicketIds(ids);
+        }
+      }
+
     } catch (err) {
       console.error(err);
       setError("Failed to load tickets from Google Sheet.");
@@ -354,8 +366,8 @@ export default function AllTicketsPage() {
                   </TableHeader>
                   <TableBody>
                       {filteredTickets.map((row, rowIndex) => {
-                          const status = statusIndex !== -1 ? row[statusIndex] : '';
-                          const isProjectCreated = status === 'In Progress' || status === 'Completed';
+                          const ticketId = ticketIdIndex !== -1 ? row[ticketIdIndex] : '';
+                          const isProjectCreated = ticketId ? existingProjectTicketIds.has(ticketId) : false;
 
                           return (
                             <TableRow key={rowIndex}>
