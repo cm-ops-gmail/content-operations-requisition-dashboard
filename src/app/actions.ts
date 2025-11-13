@@ -521,6 +521,67 @@ export async function addKanbanTask(
     return await appendRow(dataToSave, 'KanbanTasks');
 }
 
+export async function updateKanbanTask(
+    sheetRowIndex: number,
+    taskData: Partial<Omit<KanbanTask, 'id' | 'sheetRowIndex' | 'projectId'>>
+) {
+    try {
+        const kanbanSheetData = await getSheetData('KanbanTasks');
+        if (!kanbanSheetData.values || kanbanSheetData.values.length === 0) {
+            return { success: false, error: 'No kanban data found to update.' };
+        }
+        const headers = kanbanSheetData.values[0];
+        
+        const dataToSave: Record<string, string> = {
+            'Title': taskData.title ?? '',
+            'Description': taskData.description ?? '',
+            'Type': taskData.type ?? '',
+            'Priority': taskData.priority ?? '',
+            'Assignee': taskData.assignee ?? '',
+            'Due Date': taskData.dueDate ?? '',
+            'Tags': taskData.tags?.join(',') ?? '',
+        };
+
+        const updateRequests = Object.entries(dataToSave).map(([header, value]) => {
+            const colIndex = headers.indexOf(header);
+            if (colIndex === -1) return null;
+            return {
+                updateCells: {
+                    range: {
+                        sheetId: 0, // Assume sheetId 0 unless you need to look it up
+                        startRowIndex: sheetRowIndex - 1,
+                        endRowIndex: sheetRowIndex,
+                        startColumnIndex: colIndex,
+                        endColumnIndex: colIndex + 1,
+                    },
+                    rows: [{ values: [{ userEnteredValue: { stringValue: value } }] }],
+                    fields: 'userEnteredValue.stringValue'
+                }
+            };
+        }).filter(Boolean);
+
+        if (updateRequests.length === 0) {
+            return { success: true }; // Nothing to update
+        }
+        
+        const kanbanSheetId = await getSheetId('KanbanTasks');
+        const finalRequests = updateRequests.map(req => {
+            if (req) {
+              req.updateCells.range.sheetId = kanbanSheetId;
+            }
+            return req;
+        });
+
+        return await batchUpdateSheet(finalRequests as any[]);
+
+    } catch (error) {
+        console.error('Error updating task:', error);
+        if (error instanceof Error) return { success: false, error: error.message };
+        return { success: false, error: 'An unknown error occurred.' };
+    }
+}
+
+
 export async function updateKanbanTaskStatus(sheetRowIndex: number, newStatus: string) {
      try {
         const kanbanSheetData = await getSheetData('KanbanTasks');
@@ -695,6 +756,8 @@ export async function updateWorkTypeQuestion(newQuestion: string) {
         return { success: false, error: 'An unknown error occurred.' };
     }
 }
+
+    
 
     
 
