@@ -43,7 +43,7 @@ export default function KanbanListPage() {
   }, []);
 
   const projectIdIndex = headers.indexOf('Project ID');
-  const nameIndex = headers.findIndex(h => h.toLowerCase().includes('name'));
+  const projectTitleIndex = headers.indexOf('Project Title');
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
@@ -71,14 +71,20 @@ export default function KanbanListPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Project Name</TableHead>
+                  <TableHead>Project</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {projects.map((row, rowIndex) => (
+                {projects.map((row, rowIndex) => {
+                  const projectId = row[projectIdIndex] || '';
+                  const projectTitle = row[projectTitleIndex] || 'Untitled Project';
+                  return (
                   <TableRow key={rowIndex}>
-                    <TableCell className="font-medium">{row[nameIndex] || row[projectIdIndex]}</TableCell>
+                    <TableCell className="font-medium">
+                      <div>{projectTitle}</div>
+                      <div className="text-xs text-muted-foreground">{projectId}</div>
+                    </TableCell>
                     <TableCell className="text-right">
                        <Button asChild>
                          <Link href={`/admin/kanban/${row[projectIdIndex]}`}>
@@ -88,7 +94,8 @@ export default function KanbanListPage() {
                        </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
             )}
@@ -97,5 +104,3 @@ export default function KanbanListPage() {
     </div>
   );
 }
-
-    
