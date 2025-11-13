@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -18,8 +18,9 @@ import { useAuth } from '@/hooks/use-auth';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 const ClientDate = ({ dateString }: { dateString: string }) => {
@@ -104,7 +105,10 @@ export default function AllTicketsPage() {
   const [toDate, setToDate] = useState<Date | undefined>();
   const [ticketIdFilter, setTicketIdFilter] = useState('');
   const [selectedTicketDetails, setSelectedTicketDetails] = useState<{ details: Record<string, string>, status: string, ticketId: string } | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [isCreateProjectDialogOpen, setIsCreateProjectDialogOpen] = useState(false);
+  const [newProjectTitle, setNewProjectTitle] = useState('');
+
 
   const { toast } = useToast();
 
@@ -140,12 +144,13 @@ export default function AllTicketsPage() {
      }
   }
 
-  const handleCreateProject = async () => {
-    if (!selectedTicket) return;
+  const handleCreateProject = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedTicket || !newProjectTitle) return;
     setIsSubmitting(true);
     
     const originalIndex = tickets.length - 1 - selectedTicket.rowIndex;
-    const result = await createProjectFromTicket({ ...selectedTicket, rowIndex: originalIndex + 1 });
+    const result = await createProjectFromTicket({ ...selectedTicket, rowIndex: originalIndex + 1 }, newProjectTitle);
 
     if (result.success) {
       toast({
@@ -153,6 +158,8 @@ export default function AllTicketsPage() {
         description: 'The ticket has been converted to a project.',
       });
       setSelectedTicket(null);
+      setNewProjectTitle('');
+      setIsCreateProjectDialogOpen(false);
       await fetchTickets(); 
     } else {
        toast({
@@ -193,7 +200,7 @@ export default function AllTicketsPage() {
         const ticketId = row[ticketIdIndex] || 'N/A';
 
         setSelectedTicketDetails({ details, status, ticketId });
-        setIsDialogOpen(true);
+        setIsDetailsDialogOpen(true);
     };
 
   const isLoggedIn = !!user;
@@ -259,10 +266,40 @@ export default function AllTicketsPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">All Submitted Tickets</h1>
           {selectedTicket && canManageProjects && (
-              <Button onClick={handleCreateProject} disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderPlus className="mr-2 h-4 w-4" />}
-                  Create Project
-              </Button>
+              <Dialog open={isCreateProjectDialogOpen} onOpenChange={setIsCreateProjectDialogOpen}>
+                <DialogTrigger asChild>
+                    <Button>
+                        <FolderPlus className="mr-2 h-4 w-4" />
+                        Create Project
+                    </Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Create New Project</DialogTitle>
+                        <DialogDescription>
+                            Enter a title for the new project. This will be created from ticket {selectedTicket.values[ticketIdIndex]}.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleCreateProject}>
+                        <div className="py-4">
+                            <Label htmlFor="project-title">Project Title</Label>
+                            <Input 
+                                id="project-title"
+                                value={newProjectTitle}
+                                onChange={(e) => setNewProjectTitle(e.target.value)}
+                                placeholder="Enter a descriptive project title"
+                                required
+                            />
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="ghost" onClick={() => setIsCreateProjectDialogOpen(false)}>Cancel</Button>
+                            <Button type="submit" disabled={isSubmitting}>
+                                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create Project'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+              </Dialog>
           )}
         </div>
          <Card className="mb-6">
@@ -304,6 +341,7 @@ export default function AllTicketsPage() {
                   <p className="text-destructive text-center py-8">{error}</p>
               ) : (
                <div className="overflow-x-auto">
+                <TooltipProvider>
                   <Table>
                   <TableHeader>
                       <TableRow>
@@ -315,66 +353,84 @@ export default function AllTicketsPage() {
                       </TableRow>
                   </TableHeader>
                   <TableBody>
-                      {filteredTickets.map((row, rowIndex) => (
-                      <TableRow key={rowIndex}>
-                          <TableCell>
-                              <Checkbox 
-                                  checked={selectedTicket?.rowIndex === tickets.indexOf(row)}
-                                  onCheckedChange={() => handleSelectTicket(tickets.indexOf(row), row)}
-                                  disabled={!canManageProjects}
-                              />
-                          </TableCell>
-                          {visibleHeaders.map((header) => {
-                               const cellIndex = headers.indexOf(header);
-                               const cell = row[cellIndex];
+                      {filteredTickets.map((row, rowIndex) => {
+                          const status = statusIndex !== -1 ? row[statusIndex] : '';
+                          const isProjectCreated = status === 'In Progress' || status === 'Completed';
 
-                               if (cellIndex === statusIndex) {
-                                  return (
-                                      <TableCell key={header}>
-                                          <Select
-                                              defaultValue={cell === 'Open' ? 'In Review' : cell}
-                                              onValueChange={(newStatus) => handleStatusChange(tickets.indexOf(row), newStatus)}
-                                              disabled={!isLoggedIn}
-                                          >
-                                              <SelectTrigger className="w-[150px]">
-                                                  <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                  <SelectItem value="In Review">In Review</SelectItem>
-                                                  <SelectItem value="In Progress">In Progress</SelectItem>
-                                                  <SelectItem value="Prioritized">Prioritized</SelectItem>
-                                                  <SelectItem value="On Hold">On Hold</SelectItem>
-                                                  <SelectItem value="Delivered">Delivered</SelectItem>
-                                                  <SelectItem value="Completed">Completed</SelectItem>
-                                              </SelectContent>
-                                          </Select>
-                                      </TableCell>
-                                  )
-                               }
-                               if (cellIndex === workTypeIndex) {
-                                  return <TableCell key={header}><WorkTypeIndicator workType={cell} /></TableCell>
-                               }
-                               if (cellIndex === createdDateIndex) {
-                                  return <TableCell key={header}><ClientDate dateString={cell} /></TableCell>
-                               }
-                              return <TableCell key={header}>{cell === 'Open' ? 'In Review' : cell}</TableCell>
-                          })}
-                          <TableCell>
-                              <Button variant="outline" size="sm" onClick={() => handleViewDetails(row)}>
-                                 <Eye className="mr-2 h-4 w-4" />
-                                 View Details
-                               </Button>
-                          </TableCell>
-                      </TableRow>
-                      ))}
+                          return (
+                            <TableRow key={rowIndex}>
+                                <TableCell>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            {/* The div is necessary for the tooltip to work on a disabled element */}
+                                            <div> 
+                                                <Checkbox 
+                                                    checked={selectedTicket?.rowIndex === tickets.indexOf(row)}
+                                                    onCheckedChange={() => handleSelectTicket(tickets.indexOf(row), row)}
+                                                    disabled={!canManageProjects || isProjectCreated}
+                                                />
+                                            </div>
+                                        </TooltipTrigger>
+                                        {isProjectCreated && (
+                                            <TooltipContent>
+                                                <p>A project has already been created for this ticket.</p>
+                                            </TooltipContent>
+                                        )}
+                                    </Tooltip>
+                                </TableCell>
+                                {visibleHeaders.map((header) => {
+                                      const cellIndex = headers.indexOf(header);
+                                      const cell = row[cellIndex];
+
+                                      if (cellIndex === statusIndex) {
+                                        return (
+                                            <TableCell key={header}>
+                                                <Select
+                                                    defaultValue={cell === 'Open' ? 'In Review' : cell}
+                                                    onValueChange={(newStatus) => handleStatusChange(tickets.indexOf(row), newStatus)}
+                                                    disabled={!isLoggedIn}
+                                                >
+                                                    <SelectTrigger className="w-[150px]">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="In Review">In Review</SelectItem>
+                                                        <SelectItem value="In Progress">In Progress</SelectItem>
+                                                        <SelectItem value="Prioritized">Prioritized</SelectItem>
+                                                        <SelectItem value="On Hold">On Hold</SelectItem>
+                                                        <SelectItem value="Delivered">Delivered</SelectItem>
+                                                        <SelectItem value="Completed">Completed</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </TableCell>
+                                        )
+                                     }
+                                     if (cellIndex === workTypeIndex) {
+                                        return <TableCell key={header}><WorkTypeIndicator workType={cell} /></TableCell>
+                                     }
+                                     if (cellIndex === createdDateIndex) {
+                                        return <TableCell key={header}><ClientDate dateString={cell} /></TableCell>
+                                     }
+                                    return <TableCell key={header}>{cell === 'Open' ? 'In Review' : cell}</TableCell>
+                                })}
+                                <TableCell>
+                                    <Button variant="outline" size="sm" onClick={() => handleViewDetails(row)}>
+                                      <Eye className="mr-2 h-4 w-4" />
+                                      View Details
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                          );
+                      })}
                   </TableBody>
                   </Table>
+                </TooltipProvider>
                </div>
               )}
             </CardContent>
           </Card>
       </div>
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
           <DialogContent className="max-w-2xl">
              <DialogHeader>
                 <DialogTitle>Ticket Details</DialogTitle>
@@ -402,3 +458,5 @@ export default function AllTicketsPage() {
 }
 
 
+
+    
