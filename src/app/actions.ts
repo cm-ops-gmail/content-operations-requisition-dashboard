@@ -143,10 +143,10 @@ export async function getTeams(): Promise<string[]> {
     try {
         const sheetData = await getSheetData('FormQuestions');
         const teams = new Set((sheetData.values || []).slice(1).map(row => row[0]).filter(Boolean));
-        return ["Common", ...Array.from(teams).filter(t => t !== "Common")];
+        return Array.from(teams);
     } catch (error) {
         console.error('Error getting teams:', error);
-        return ["Common"];
+        return [];
     }
 }
 
@@ -340,17 +340,24 @@ export async function createProjectFromTicket(ticketRow: { rowIndex: number, val
 
         let projectHeaders = (await getSheetData('Projects')).values?.[0];
         if (!projectHeaders || projectHeaders.length === 0) {
-            projectHeaders = ['Project ID', 'Project Title', 'Ticket ID', 'Start Date', 'End Date', 'Assignee', 'Kanban Initialized'];
+            projectHeaders = ['Project ID', 'Project Title', 'Ticket ID', 'Status', 'Start Date', 'End Date', 'Assignee', 'Kanban Initialized'];
             await appendRow(Object.fromEntries(projectHeaders.map(h => [h, ''])), 'Projects');
-        } else if (!projectHeaders.includes('Project Title')) {
-            await addColumn('Project Title', 'Projects');
-            projectHeaders.push('Project Title');
+        } else {
+             if (!projectHeaders.includes('Project Title')) {
+                await addColumn('Project Title', 'Projects');
+                projectHeaders.push('Project Title');
+            }
+            if (!projectHeaders.includes('Status')) {
+                await addColumn('Status', 'Projects');
+                projectHeaders.push('Status');
+            }
         }
         
         const projectData: Record<string, string> = {
             'Project ID': projectId,
             'Project Title': projectTitle,
             'Ticket ID': ticketId,
+            'Status': 'In Review',
             'Start Date': '',
             'End Date': '',
             'Assignee': '',
@@ -431,12 +438,13 @@ export async function initializeKanban(rowIndex: number, projectId: string) {
     try {
         const kanbanSheetData = await getSheetData('KanbanTasks');
         if (!kanbanSheetData.values || kanbanSheetData.values.length === 0) {
-            const headers = ['Project ID', 'Task ID', 'Title', 'Status', 'Assignee', 'Due Date', 'Description', 'Type', 'Priority', 'Tags'];
+            const headers = ['Project ID', 'Sequence', 'Task ID', 'Title', 'Status', 'Assignee', 'Due Date', 'Description', 'Type', 'Priority', 'Tags'];
             await appendRow(headers.reduce((acc, h) => ({...acc, [h]: ''}), {}), 'KanbanTasks');
         }
         
         await appendRow({
             'Project ID': projectId,
+            'Sequence': '1',
             'Task ID': `TASK-${Date.now()}`,
             'Title': 'Project Kick-off',
             'Status': 'todo',
@@ -465,6 +473,7 @@ export async function getKanbanTasks(projectId: string): Promise<KanbanTask[]> {
         }
         const headers = kanbanData.values[0];
         const projectIdIndex = headers.indexOf('Project ID');
+        const sequenceIndex = headers.indexOf('Sequence');
         const taskIdIndex = headers.indexOf('Task ID');
         const titleIndex = headers.indexOf('Title');
         const statusIndex = headers.indexOf('Status');
@@ -481,19 +490,23 @@ export async function getKanbanTasks(projectId: string): Promise<KanbanTask[]> {
 
         return kanbanData.values
             .slice(1)
-            .map((row, index) => ({
-                sheetRowIndex: index + 2, // 1-based index + header
-                id: row[taskIdIndex],
-                projectId: row[projectIdIndex],
-                title: row[titleIndex],
-                status: row[statusIndex] as 'todo' | 'inprogress' | 'review' | 'done',
-                assignee: row[assigneeIndex],
-                dueDate: row[dueDateIndex],
-                description: row[descriptionIndex] || '',
-                type: row[typeIndex] || 'Task',
-                priority: row[priorityIndex] as 'Low' | 'Medium' | 'High' | 'Critical' || 'Medium',
-                tags: row[tagsIndex] ? row[tagsIndex].split(',') : []
-            }))
+            .map((row, index) => {
+                const sequenceNumber = sequenceIndex !== -1 ? parseInt(row[sequenceIndex], 10) : index + 1;
+                return {
+                    sheetRowIndex: index + 2, // 1-based index + header
+                    id: row[taskIdIndex],
+                    projectId: row[projectIdIndex],
+                    sequenceNumber: isNaN(sequenceNumber) ? index + 1 : sequenceNumber,
+                    title: row[titleIndex],
+                    status: row[statusIndex] as 'todo' | 'inprogress' | 'review' | 'done',
+                    assignee: row[assigneeIndex],
+                    dueDate: row[dueDateIndex],
+                    description: row[descriptionIndex] || '',
+                    type: row[typeIndex] || 'Task',
+                    priority: row[priorityIndex] as 'Low' | 'Medium' | 'High' | 'Critical' || 'Medium',
+                    tags: row[tagsIndex] ? row[tagsIndex].split(',') : []
+                };
+            })
             .filter(task => task.projectId === projectId);
 
     } catch (error) {
@@ -504,10 +517,14 @@ export async function getKanbanTasks(projectId: string): Promise<KanbanTask[]> {
 
 export async function addKanbanTask(
     projectId: string, 
-    taskData: Omit<KanbanTask, 'id' | 'sheetRowIndex' | 'projectId' | 'status'>
+    taskData: Omit<KanbanTask, 'id' | 'sheetRowIndex' | 'projectId' | 'status' | 'sequenceNumber'>
 ) {
+    const existingTasks = await getKanbanTasks(projectId);
+    const nextSequenceNumber = (existingTasks.length > 0 ? Math.max(...existingTasks.map(t => t.sequenceNumber)) : 0) + 1;
+
     const dataToSave = {
         'Project ID': projectId,
+        'Sequence': nextSequenceNumber.toString(),
         'Task ID': `TASK-${Date.now()}`,
         'Title': taskData.title,
         'Status': 'todo',
@@ -523,7 +540,7 @@ export async function addKanbanTask(
 
 export async function updateKanbanTask(
     sheetRowIndex: number,
-    taskData: Partial<Omit<KanbanTask, 'id' | 'sheetRowIndex' | 'projectId'>>
+    taskData: Partial<Omit<KanbanTask, 'id' | 'sheetRowIndex' | 'projectId' | 'sequenceNumber'>>
 ) {
     try {
         const kanbanSheetData = await getSheetData('KanbanTasks');
@@ -532,23 +549,24 @@ export async function updateKanbanTask(
         }
         const headers = kanbanSheetData.values[0];
         
-        const dataToSave: Record<string, string> = {
-            'Title': taskData.title ?? '',
-            'Description': taskData.description ?? '',
-            'Type': taskData.type ?? '',
-            'Priority': taskData.priority ?? '',
-            'Assignee': taskData.assignee ?? '',
-            'Due Date': taskData.dueDate ?? '',
-            'Tags': taskData.tags?.join(',') ?? '',
+        const dataToSave: Record<string, string | undefined> = {
+            'Title': taskData.title,
+            'Description': taskData.description,
+            'Type': taskData.type,
+            'Priority': taskData.priority,
+            'Assignee': taskData.assignee,
+            'Due Date': taskData.dueDate,
+            'Tags': taskData.tags?.join(','),
         };
 
         const updateRequests = Object.entries(dataToSave).map(([header, value]) => {
+            if (value === undefined) return null;
             const colIndex = headers.indexOf(header);
             if (colIndex === -1) return null;
             return {
                 updateCells: {
                     range: {
-                        sheetId: 0, // Assume sheetId 0 unless you need to look it up
+                        sheetId: 0, 
                         startRowIndex: sheetRowIndex - 1,
                         endRowIndex: sheetRowIndex,
                         startColumnIndex: colIndex,
@@ -561,7 +579,7 @@ export async function updateKanbanTask(
         }).filter(Boolean);
 
         if (updateRequests.length === 0) {
-            return { success: true }; // Nothing to update
+            return { success: true }; 
         }
         
         const kanbanSheetId = await getSheetId('KanbanTasks');
