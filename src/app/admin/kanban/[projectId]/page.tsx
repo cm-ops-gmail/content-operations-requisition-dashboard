@@ -236,7 +236,7 @@ export default function KanbanPage() {
   });
 
   const totalTickets = Object.values(tasks).flat().length;
-  const canManage = !!user;
+  const canManage = user?.role === 'admin' || user?.role === 'sub-admin';
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
@@ -378,7 +378,7 @@ export default function KanbanPage() {
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="absolute top-2 left-2 h-6 w-6 flex items-center justify-center bg-muted-foreground/10 text-muted-foreground rounded-full text-xs font-bold">
-                                    {index + 1}
+                                    {task.sequenceNumber || index + 1}
                                 </div>
                                 <div className="flex items-center gap-2 mb-2 pl-8">
                                     <Badge variant="outline" className={getPriorityColor(task.priority)}>{task.priority}</Badge>
@@ -423,5 +423,3 @@ export default function KanbanPage() {
     </div>
   );
 }
-
-    
