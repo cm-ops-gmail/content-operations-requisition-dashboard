@@ -12,6 +12,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { getMembers } from '@/app/actions';
 
 const ADMIN_PASSWORD = 'admin';
+const SUB_ADMIN_CREDS: Record<string, string> = {
+    'smd': 'smd123',
+    'cm': 'cm123',
+    'qac': 'qac123',
+    'class ops': 'ops123'
+};
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -27,8 +33,10 @@ export default function LoginPage() {
     setError('');
     setIsSubmitting(true);
 
+    const usernameLower = username.toLowerCase();
+
     // Admin Login
-    if (username.toLowerCase() === 'admin') {
+    if (usernameLower === 'admin') {
       if (password === ADMIN_PASSWORD) {
         toast({ title: 'Login Successful', description: 'Welcome, Admin!' });
         login({ name: 'admin', role: 'admin' });
@@ -38,6 +46,20 @@ export default function LoginPage() {
       setIsSubmitting(false);
       return;
     }
+    
+    // Sub-Admin Login
+    const subAdminPassword = SUB_ADMIN_CREDS[usernameLower];
+    if (subAdminPassword) {
+      if (password === subAdminPassword) {
+        toast({ title: 'Login Successful', description: `Welcome, ${username}!` });
+        login({ name: username, role: 'sub-admin' });
+      } else {
+        setError(`Incorrect password for ${username}.`);
+      }
+      setIsSubmitting(false);
+      return;
+    }
+
 
     // Team Member Login
     try {
@@ -58,7 +80,7 @@ export default function LoginPage() {
         return;
       }
 
-      const member = members.find(m => m[nameIndex]?.toLowerCase() === username.toLowerCase());
+      const member = members.find(m => m[nameIndex]?.toLowerCase() === usernameLower);
 
       if (member) {
         const expectedPassword = `${member[nameIndex]}123`;
