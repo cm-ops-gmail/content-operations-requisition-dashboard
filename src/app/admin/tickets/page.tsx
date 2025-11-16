@@ -216,7 +216,7 @@ export default function AllTicketsPage() {
     };
 
   const isLoggedIn = !!user;
-  const canManageProjects = user?.role === 'admin';
+  const canManageProjects = user?.role === 'admin' || user?.role === 'sub-admin';
   const statusIndex = headers.indexOf('Status');
   const workTypeIndex = headers.indexOf('Work Type');
   const createdDateIndex = headers.indexOf('Created Date');
@@ -468,7 +468,3 @@ export default function AllTicketsPage() {
     </>
   );
 }
-
-
-
-    
