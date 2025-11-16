@@ -119,8 +119,9 @@ export default function AdminPage() {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Start with the clean question text
-    let finalQuestionText = newQuestionText.trim();
+    let finalQuestionText = newQuestionText.trim()
+        .replace(/\s*\((select|checkbox|url|textarea):.*?\)\s*|\*$/gi, '')
+        .trim();
     
     if (newQuestionType === 'Select') {
       const options = selectOptions.split(';').map(o => o.trim()).filter(Boolean);
@@ -221,7 +222,7 @@ export default function AdminPage() {
              <div className="flex gap-2">
                 <Dialog open={isTeamDialogOpen} onOpenChange={setIsTeamDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline">
+                    <Button variant="outline" disabled={!canManage}>
                       <PlusCircle className="mr-2" /> Add Team
                     </Button>
                   </DialogTrigger>
@@ -251,7 +252,7 @@ export default function AdminPage() {
                 </Dialog>
                 <Dialog open={isQuestionDialogOpen} onOpenChange={setIsQuestionDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button onClick={() => handleOpenQuestionDialog()} disabled={!selectedTeam}>
+                    <Button onClick={() => handleOpenQuestionDialog()} disabled={!selectedTeam || !canManage}>
                       <PlusCircle className="mr-2" />
                       Add New Question
                     </Button>
@@ -431,6 +432,4 @@ export default function AdminPage() {
     </>
   );
 }
-    
-
     
