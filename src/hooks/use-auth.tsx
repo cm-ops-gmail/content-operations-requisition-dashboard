@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 
 interface User {
     name: string;
-    role: 'admin' | 'member';
+    role: 'admin' | 'sub-admin' | 'member';
 }
 
 interface AuthContextType {
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const login = useCallback((user: User) => {
         sessionStorage.setItem('user', JSON.stringify(user));
         setUser(user);
-        if (user.role === 'admin') {
+        if (user.role === 'admin' || user.role === 'sub-admin') {
             router.push('/admin');
         } else {
             router.push('/');
