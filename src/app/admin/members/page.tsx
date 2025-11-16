@@ -79,7 +79,7 @@ export default function MembersPage() {
     setIsSubmitting(false);
   };
   
-  const canManage = user?.role === 'admin';
+  const canManage = user?.role === 'admin' || user?.role === 'sub-admin';
 
   return (
     <>
@@ -172,5 +172,3 @@ export default function MembersPage() {
     </>
   );
 }
-
-    
