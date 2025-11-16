@@ -2,13 +2,13 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getProjects, getMembers, updateProject, initializeKanban } from '@/app/actions';
-import { Loader2, Calendar as CalendarIcon, User, KanbanSquare, Check, Search } from 'lucide-react';
+import { getProjects, getMembers, updateProject, initializeKanban, createManualProject } from '@/app/actions';
+import { Loader2, Calendar as CalendarIcon, User, KanbanSquare, Check, Search, PlusCircle } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
@@ -18,6 +18,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/hooks/use-auth';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 export default function ProjectsPage() {
   const { user } = useAuth();
@@ -30,6 +32,9 @@ export default function ProjectsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [projectIdFilter, setProjectIdFilter] = useState('');
   const [ticketIdFilter, setTicketIdFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [isManualCreateOpen, setIsManualCreateOpen] = useState(false);
+  const [newProjectTitle, setNewProjectTitle] = useState('');
   const { toast } = useToast();
 
   const fetchData = async () => {
@@ -113,6 +118,29 @@ export default function ProjectsPage() {
     }
     setIsSubmitting(false);
   }
+  
+  const handleManualCreateSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    const result = await createManualProject(newProjectTitle);
+    if (result.success) {
+        toast({
+            title: 'Project Created!',
+            description: `Project "${newProjectTitle}" has been created manually.`
+        });
+        setIsManualCreateOpen(false);
+        setNewProjectTitle('');
+        await fetchData();
+    } else {
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: result.error || 'Failed to create manual project.'
+        });
+    }
+    setIsSubmitting(false);
+  }
+
 
   const canManage = user?.role === 'admin' || user?.role === 'sub-admin';
   const projectIdIndex = headers.indexOf('Project ID');
@@ -128,9 +156,14 @@ export default function ProjectsPage() {
   const filteredProjects = projects.filter(project => {
     const projectId = project[projectIdIndex] || '';
     const ticketId = project[ticketIdIndex] || '';
+    const status = project[statusIndex] || '';
+
+    const matchesStatus = statusFilter === 'all' || status === statusFilter;
+
     return (
         projectId.toLowerCase().includes(projectIdFilter.toLowerCase()) &&
-        ticketId.toLowerCase().includes(ticketIdFilter.toLowerCase())
+        ticketId.toLowerCase().includes(ticketIdFilter.toLowerCase()) &&
+        matchesStatus
     );
   });
 
@@ -169,14 +202,53 @@ export default function ProjectsPage() {
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-4">
         <h1 className="text-3xl font-bold">Manage Projects</h1>
-        {canCreateKanban && (
-            <Button onClick={handleCreateKanban} disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KanbanSquare className="mr-2 h-4 w-4" />}
-                Create Kanban Board
-            </Button>
-        )}
+        <div className="flex gap-2">
+            {canCreateKanban && (
+                <Button onClick={handleCreateKanban} disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KanbanSquare className="mr-2 h-4 w-4" />}
+                    Create Kanban Board
+                </Button>
+            )}
+             {canManage && (
+                <Dialog open={isManualCreateOpen} onOpenChange={setIsManualCreateOpen}>
+                    <DialogTrigger asChild>
+                        <Button variant="outline">
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Create Manual Project
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Create a New Manual Project</DialogTitle>
+                            <DialogDescription>
+                                This project will not be linked to a ticket.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleManualCreateSubmit}>
+                            <div className="py-4">
+                                <Label htmlFor="manual-project-title">Project Title</Label>
+                                <Input 
+                                    id="manual-project-title"
+                                    value={newProjectTitle}
+                                    onChange={e => setNewProjectTitle(e.target.value)}
+                                    placeholder="Enter a descriptive project title"
+                                    required
+                                />
+                            </div>
+                            <DialogFooter>
+                                <Button variant="ghost" type="button" onClick={() => setIsManualCreateOpen(false)}>Cancel</Button>
+                                <Button type="submit" disabled={isSubmitting}>
+                                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Create Project
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+             )}
+        </div>
       </div>
 
        <Card className="mb-6">
@@ -198,6 +270,19 @@ export default function ProjectsPage() {
                 onChange={(e) => setTicketIdFilter(e.target.value)}
                 className="pl-10"
               />
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="In Review">In Review</SelectItem>
+                  <SelectItem value="Ongoing">Ongoing</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
         </CardContent>
        </Card>
@@ -265,7 +350,7 @@ export default function ProjectsPage() {
                                     {members.map((member, i) => (
                                         <SelectItem key={i} value={member[0]}>{member[0]} ({member[1]})</SelectItem>
                                     ))}
-                                 </SelectContent>
+                                </SelectContent>
                                </Select>
                            </TableCell>
                           )
