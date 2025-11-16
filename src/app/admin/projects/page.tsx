@@ -121,6 +121,7 @@ export default function ProjectsPage() {
   const startDateIndex = headers.indexOf('Start Date');
   const endDateIndex = headers.indexOf('End Date');
   const assigneeIndex = headers.indexOf('Assignee');
+  const statusIndex = headers.indexOf('Status');
   const kanbanInitializedIndex = headers.indexOf('Kanban Initialized');
   const canCreateKanban = selectedProject && selectedProject.values[kanbanInitializedIndex] !== 'Yes' && canManage;
   
@@ -264,10 +265,26 @@ export default function ProjectsPage() {
                                     {members.map((member, i) => (
                                         <SelectItem key={i} value={member[0]}>{member[0]} ({member[1]})</SelectItem>
                                     ))}
-                                </SelectContent>
+                                 </SelectContent>
                                </Select>
                            </TableCell>
                           )
+                       }
+                       if (cellIndex === statusIndex) {
+                           return (
+                               <TableCell key={cellIndex}>
+                                   <Select onValueChange={(value) => handleUpdate(projects.indexOf(row), 'Status', value)} defaultValue={cell} disabled={!canManage}>
+                                       <SelectTrigger className="w-[150px]">
+                                           <SelectValue placeholder="Set status" />
+                                       </SelectTrigger>
+                                       <SelectContent>
+                                           <SelectItem value="In Review">In Review</SelectItem>
+                                           <SelectItem value="Ongoing">Ongoing</SelectItem>
+                                           <SelectItem value="Completed">Completed</SelectItem>
+                                       </SelectContent>
+                                   </Select>
+                               </TableCell>
+                           )
                        }
                        if (cellIndex === kanbanInitializedIndex) {
                             const projectId = row[projectIdIndex];
