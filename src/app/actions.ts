@@ -384,6 +384,49 @@ export async function createProjectFromTicket(ticketRow: { rowIndex: number, val
     }
 }
 
+export async function createManualProject(projectTitle: string) {
+    if (!projectTitle) {
+        return { success: false, error: 'Project title is required.' };
+    }
+    try {
+        const projectId = `PROJ-${Date.now()}`;
+
+        let projectHeaders = (await getSheetData('Projects')).values?.[0];
+        if (!projectHeaders || projectHeaders.length === 0) {
+            projectHeaders = ['Project ID', 'Project Title', 'Ticket ID', 'Status', 'Start Date', 'End Date', 'Assignee', 'Kanban Initialized'];
+             // Create header row if it doesn't exist
+            await appendRow(Object.fromEntries(projectHeaders.map(h => [h, h])), 'Projects');
+        } else {
+            if (!projectHeaders.includes('Project Title')) {
+                await addColumn('Project Title', 'Projects');
+                projectHeaders.push('Project Title');
+            }
+            if (!projectHeaders.includes('Status')) {
+                await addColumn('Status', 'Projects');
+                projectHeaders.push('Status');
+            }
+        }
+
+        const projectData: Record<string, string> = {
+            'Project ID': projectId,
+            'Project Title': projectTitle,
+            'Ticket ID': '',
+            'Status': 'In Review',
+            'Start Date': '',
+            'End Date': '',
+            'Assignee': '',
+            'Kanban Initialized': 'No'
+        };
+
+        return await appendRow(projectData, 'Projects');
+    } catch (error) {
+        console.error('Error creating manual project:', error);
+        if (error instanceof Error) return { success: false, error: error.message };
+        return { success: false, error: 'An unknown error occurred.' };
+    }
+}
+
+
 export async function updateProject(rowIndex: number, newValues: { [key: string]: string }) {
     try {
         const projectSheetData = await getSheetData('Projects');
