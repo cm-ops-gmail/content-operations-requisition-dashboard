@@ -114,8 +114,9 @@ export default function ProjectsPage() {
     setIsSubmitting(false);
   }
 
-  const canManage = user?.role === 'admin';
+  const canManage = user?.role === 'admin' || user?.role === 'sub-admin';
   const projectIdIndex = headers.indexOf('Project ID');
+  const projectTitleIndex = headers.indexOf('Project Title');
   const ticketIdIndex = headers.indexOf('Ticket ID');
   const startDateIndex = headers.indexOf('Start Date');
   const endDateIndex = headers.indexOf('End Date');
@@ -284,6 +285,10 @@ export default function ProjectsPage() {
                                 </TableCell>
                             )
                        }
+                       // Display project title more prominently
+                       if (cellIndex === projectTitleIndex && cell) {
+                           return <TableCell key={cellIndex} className="font-semibold">{cell}</TableCell>
+                       }
                        return <TableCell key={cellIndex}>{cell}</TableCell>
                     })}
                   </TableRow>
@@ -297,4 +302,3 @@ export default function ProjectsPage() {
     </div>
   );
 }
-
