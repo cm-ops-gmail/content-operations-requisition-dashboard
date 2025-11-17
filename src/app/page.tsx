@@ -47,30 +47,18 @@ async function getDashboardData() {
   }
 }
 
-// We create a new component to fetch and render the data.
-// This isolates the dynamic data fetching.
-async function Dashboard() {
-    const { tickets, ticketHeaders, teams, statuses, workTypes } = await getDashboardData();
-    return (
-        <DashboardClient 
-            tickets={tickets} 
-            headers={ticketHeaders}
-            teams={teams}
-            statuses={statuses}
-            workTypes={workTypes}
-        />
-    )
-}
-
-export default function Home() {
+export default async function Home() {
+  const { tickets, ticketHeaders, teams, statuses, workTypes } = await getDashboardData();
   return (
     <div className="bg-background flex-1">
         <main className="container mx-auto py-8 px-4 md:px-6">
-            <div className="mt-8">
-               <React.Suspense fallback={<p>Loading dashboard...</p>}>
-                  <Dashboard />
-               </React.Suspense>
-            </div>
+            <DashboardClient 
+                tickets={tickets} 
+                headers={ticketHeaders}
+                teams={teams}
+                statuses={statuses}
+                workTypes={workTypes}
+            />
         </main>
     </div>
   );
