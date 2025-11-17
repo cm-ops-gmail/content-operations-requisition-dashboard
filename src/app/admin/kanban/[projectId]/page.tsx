@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getKanbanTasks, getMembers, addKanbanTask, updateKanbanTask, updateKanbanTaskStatus, deleteKanbanTask, batchUpdateKanbanTaskSequence } from '@/app/actions';
+import { getKanbanTasks, getMembers, addKanbanTask, updateKanbanTask, updateKanbanTaskStatus, deleteKanbanTask } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Search, Users, Calendar, Trash2, Edit, Eye } from 'lucide-react';
 import type { KanbanTask } from '@/lib/mock-data';
@@ -111,77 +111,41 @@ export default function KanbanPage() {
     fetchData();
   }, [projectId]);
 
-  const onDragEnd = async (result: DropResult) => {
+    const onDragEnd = async (result: DropResult) => {
     const { source, destination, draggableId } = result;
 
-    if (!destination) {
-      return;
-    }
+    if (!destination) return;
 
     if (source.droppableId === destination.droppableId && source.index === destination.index) {
       return;
     }
 
-    // Create a deep copy to avoid direct state mutation
-    const newTasksState = JSON.parse(JSON.stringify(tasks));
-
     const startColId = source.droppableId as ColumnId;
-    const endColId = destination.droppableId as ColumnId;
-    const startCol: KanbanTask[] = newTasksState[startColId];
-    const endCol: KanbanTask[] = newTasksState[endColId];
+    const finishColId = destination.droppableId as ColumnId;
 
-    // Find the moved task
-    const movedTaskIndex = startCol.findIndex((t: KanbanTask) => t.id === draggableId);
-    if (movedTaskIndex === -1) return;
-
-    // Remove from source column
-    const [movedTask] = startCol.splice(movedTaskIndex, 1);
+    const startCol = Array.from(tasks[startColId]);
+    const finishCol = startColId === finishColId ? startCol : Array.from(tasks[finishColId]);
     
-    // Add to destination column
-    endCol.splice(destination.index, 0, movedTask);
+    const movedTask = startCol.find(t => t.id === draggableId);
+    if (!movedTask) return;
+
+    // Optimistic UI update
+    startCol.splice(source.index, 1);
+    movedTask.status = finishColId;
+    finishCol.splice(destination.index, 0, movedTask);
     
-    // Optimistically update the UI
-    setTasks(newTasksState);
+    const newTasks = {
+        ...tasks,
+        [startColId]: startCol,
+        [finishColId]: finishCol,
+    };
+    setTasks(newTasks);
 
-    if (startColId === endColId) {
-      // Reordering within the same column
-      const sequenceUpdates = endCol.map((task, index) => ({
-        sheetRowIndex: task.sheetRowIndex,
-        sequenceNumber: index + 1,
-      }));
-
-      const res = await batchUpdateKanbanTaskSequence(sequenceUpdates);
-      if (res.success) {
-        toast({ title: 'Task Moved', description: 'Sequence has been updated.' });
-      } else {
-        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task sequence.' });
+    // Update backend
+    const res = await updateKanbanTaskStatus(movedTask.sheetRowIndex, finishColId);
+    if (!res.success) {
+        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task status.' });
         await fetchData(); // Revert on failure
-      }
-    } else {
-      // Moving to a different column
-      movedTask.status = endColId;
-
-      const startColUpdates = startCol.map((task, index) => ({
-        sheetRowIndex: task.sheetRowIndex,
-        sequenceNumber: index + 1,
-      }));
-
-      const endColUpdates = endCol.map((task, index) => ({
-        sheetRowIndex: task.sheetRowIndex,
-        sequenceNumber: index + 1,
-      }));
-
-      const [statusRes, sequenceRes] = await Promise.all([
-        updateKanbanTaskStatus(movedTask.sheetRowIndex, endColId),
-        batchUpdateKanbanTaskSequence([...startColUpdates, ...endColUpdates]),
-      ]);
-        
-      if (statusRes.success && sequenceRes.success) {
-        toast({ title: 'Task Moved', description: `Task moved to ${columnsConfig[endColId].title}.` });
-      } else {
-        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not move task.' });
-        await fetchData(); // Revert on failure
-      }
     }
   };
   
@@ -425,28 +389,26 @@ export default function KanbanPage() {
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                   <div className="absolute top-2 left-2 h-6 w-6 flex items-center justify-center bg-muted-foreground/10 text-muted-foreground rounded-full text-xs font-bold">
-                                      {task.sequenceNumber}
+                                      {index + 1}
                                   </div>
                                   <div className="flex items-center gap-2 mb-2 pl-8">
                                       <Badge variant="outline" className={getPriorityColor(task.priority)}>{task.priority}</Badge>
                                   </div>
                                   <CardTitle className="text-sm font-medium leading-tight pl-8">{task.title}</CardTitle>
                                 </div>
-                                <div className="absolute top-2 right-2 flex flex-col items-end gap-1 transition-opacity">
-                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleViewDetails(task)}>
-                                        <Eye className="h-4 w-4" />
-                                    </Button>
-                                  {canManage && (
-                                    <>
+                                {canManage && (
+                                  <div className="absolute top-2 right-2 flex flex-col items-end gap-1 transition-opacity">
+                                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleViewDetails(task)}>
+                                          <Eye className="h-4 w-4" />
+                                      </Button>
                                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleOpenDialog(task)}>
                                           <Edit className="h-4 w-4" />
                                       </Button>
                                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(task)}>
                                           <Trash2 className="h-4 w-4" />
                                       </Button>
-                                    </>
-                                  )}
-                                </div>
+                                  </div>
+                                )}
                               </div>
                              </CardHeader>
                              <CardContent className="pt-0">
@@ -525,5 +487,3 @@ export default function KanbanPage() {
     </>
   );
 }
-
-    
