@@ -113,78 +113,82 @@ export default function KanbanPage() {
 
     const startColId = source.droppableId as ColumnId;
     const endColId = destination.droppableId as ColumnId;
-
-    // Create a deep copy of tasks to manipulate
+    
+    // Create a deep copy of tasks to manipulate safely
     const newTasksState = JSON.parse(JSON.stringify(tasks));
-
-    // Find and remove task from source column
-    const sourceCol = newTasksState[startColId] as KanbanTask[];
+    const sourceCol: KanbanTask[] = newTasksState[startColId];
+    const destCol: KanbanTask[] = newTasksState[endColId];
+    
     const taskIndex = sourceCol.findIndex(t => t.id === draggableId);
     if (taskIndex === -1) return;
+
+    // Remove task from source column
     const [movedTask] = sourceCol.splice(taskIndex, 1);
 
     if (startColId === endColId) {
-      // Move within the same column
-      sourceCol.splice(destination.index, 0, movedTask);
+        // --- MOVE WITHIN THE SAME COLUMN ---
+        
+        // Add task to its new position in the same column
+        sourceCol.splice(destination.index, 0, movedTask);
 
-      // Update sequence numbers for the entire column and update UI optimistically
-      const updatedSourceCol = sourceCol.map((task, index) => ({
-        ...task,
-        sequenceNumber: index + 1
-      }));
-      newTasksState[startColId] = updatedSourceCol;
-      setTasks(newTasksState);
-      
-      const sequenceUpdates = updatedSourceCol.map((task, index) => ({
-        sheetRowIndex: task.sheetRowIndex,
-        sequenceNumber: index + 1
-      }));
+        // Update sequence numbers for the entire column
+        const updatedSequence = sourceCol.map((task, index) => ({
+            ...task,
+            sequenceNumber: index + 1
+        }));
+        
+        newTasksState[startColId] = updatedSequence;
+        setTasks(newTasksState); // Optimistic UI update
 
-      const res = await batchUpdateKanbanTaskSequence(sequenceUpdates);
-      if (!res.success) {
-        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task sequence.' });
-        fetchData(); // Revert on failure
-      }
+        const sequenceUpdates = updatedSequence.map(task => ({
+            sheetRowIndex: task.sheetRowIndex,
+            sequenceNumber: task.sequenceNumber
+        }));
+
+        const res = await batchUpdateKanbanTaskSequence(sequenceUpdates);
+        if (!res.success) {
+            toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task sequence.' });
+            fetchData(); // Revert on failure
+        }
     } else {
-      // Move to a different column
-      const destCol = newTasksState[endColId] as KanbanTask[];
-      
-      // IMPORTANT: Update the task's status *before* inserting it
-      movedTask.status = endColId;
-      destCol.splice(destination.index, 0, movedTask);
+        // --- MOVE TO A DIFFERENT COLUMN ---
 
-      // Update sequence numbers for both columns
-      const updatedSourceCol = sourceCol.map((task, index) => ({
-        ...task,
-        sequenceNumber: index + 1
-      }));
-      const updatedDestCol = destCol.map((task, index) => ({
-        ...task,
-        sequenceNumber: index + 1
-      }));
+        // Update the task's status
+        movedTask.status = endColId;
 
-      // Optimistic UI Update
-      newTasksState[startColId] = updatedSourceCol;
-      newTasksState[endColId] = updatedDestCol;
-      setTasks(newTasksState);
+        // Add task to its new position in the destination column
+        destCol.splice(destination.index, 0, movedTask);
+        
+        // Recalculate sequence for both source and destination columns
+        const updatedSourceCol = sourceCol.map((task, index) => ({
+            ...task,
+            sequenceNumber: index + 1,
+        }));
+        const updatedDestCol = destCol.map((task, index) => ({
+            ...task,
+            sequenceNumber: index + 1,
+        }));
 
-      const sourceColUpdates = updatedSourceCol.map(task => ({
-        sheetRowIndex: task.sheetRowIndex,
-        sequenceNumber: task.sequenceNumber
-      }));
-      const destColUpdates = updatedDestCol.map(task => ({
-        sheetRowIndex: task.sheetRowIndex,
-        sequenceNumber: task.sequenceNumber
-      }));
+        newTasksState[startColId] = updatedSourceCol;
+        newTasksState[endColId] = updatedDestCol;
+        setTasks(newTasksState); // Optimistic UI update
 
-      // Batch update all changes
-      const statusUpdateResult = await updateKanbanTaskStatus(movedTask.sheetRowIndex, endColId);
-      const sequenceUpdateResult = await batchUpdateKanbanTaskSequence([...sourceColUpdates, ...destColUpdates]);
+        // Prepare backend updates
+        const sequenceUpdates = [
+            ...updatedSourceCol.map(t => ({ sheetRowIndex: t.sheetRowIndex, sequenceNumber: t.sequenceNumber })),
+            ...updatedDestCol.map(t => ({ sheetRowIndex: t.sheetRowIndex, sequenceNumber: t.sequenceNumber }))
+        ];
 
-      if (!statusUpdateResult.success || !sequenceUpdateResult.success) {
-        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task.' });
-        fetchData(); // Revert on failure
-      }
+        // Execute backend updates
+        const [statusUpdateResult, sequenceUpdateResult] = await Promise.all([
+            updateKanbanTaskStatus(movedTask.sheetRowIndex, endColId),
+            batchUpdateKanbanTaskSequence(sequenceUpdates)
+        ]);
+        
+        if (!statusUpdateResult.success || !sequenceUpdateResult.success) {
+            toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task.' });
+            fetchData(); // Revert on failure
+        }
     }
   };
 
@@ -466,7 +470,3 @@ export default function KanbanPage() {
     </div>
   );
 }
-
-    
-
-    
