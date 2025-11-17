@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getKanbanTasks, getMembers, addKanbanTask, updateKanbanTask, updateKanbanTaskStatus, deleteKanbanTask } from '@/app/actions';
+import { getKanbanTasks, getMembers, addKanbanTask, updateKanbanTask, updateKanbanTaskStatus, deleteKanbanTask, batchUpdateKanbanTaskSequence } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Search, Users, Calendar, Trash2, Edit } from 'lucide-react';
 import type { KanbanTask } from '@/lib/mock-data';
@@ -77,7 +77,7 @@ export default function KanbanPage() {
       const [taskData, memberData] = await Promise.all([getKanbanTasks(projectId), getMembers()]);
 
       const categorizedTasks: Record<ColumnId, KanbanTask[]> = { todo: [], inprogress: [], review: [], done: [] };
-      taskData.forEach(task => {
+      taskData.sort((a, b) => a.sequenceNumber - b.sequenceNumber).forEach(task => {
         const status = task.status as ColumnId;
         if (categorizedTasks[status]) {
           categorizedTasks[status].push(task);
@@ -111,49 +111,77 @@ export default function KanbanPage() {
 
     if (!destination) return;
 
-    if (source.droppableId === destination.droppableId && source.index === destination.index) {
-      return;
-    }
-
     const startColId = source.droppableId as ColumnId;
     const finishColId = destination.droppableId as ColumnId;
 
+    if (startColId === finishColId && source.index === destination.index) {
+        return;
+    }
+
     const startCol = Array.from(tasks[startColId]);
     const finishCol = startColId === finishColId ? startCol : Array.from(tasks[finishColId]);
-    
+
     const movedTask = startCol.find(t => t.id === draggableId);
     if (!movedTask) return;
 
     // Optimistic UI update
     startCol.splice(source.index, 1);
-    movedTask.status = finishColId;
-    finishCol.splice(destination.index, 0, movedTask);
     
-    const newTasks = {
-        ...tasks,
-        [startColId]: startCol,
-        [finishColId]: finishCol,
-    };
+    // If moving to a different column
+    if (startColId !== finishColId) {
+        movedTask.status = finishColId;
+    }
+
+    finishCol.splice(destination.index, 0, movedTask);
+
+    const newTasks = { ...tasks, [startColId]: startCol };
+    if (startColId !== finishColId) {
+        newTasks[finishColId] = finishCol;
+    }
+
+    // Re-assign sequence numbers for the affected column(s)
+    const sequenceUpdates: { sheetRowIndex: number; sequenceNumber: number }[] = [];
+    const updatedFinishCol = finishCol.map((task, index) => {
+        const newSequenceNumber = index + 1;
+        if (task.sequenceNumber !== newSequenceNumber) {
+            sequenceUpdates.push({ sheetRowIndex: task.sheetRowIndex, sequenceNumber: newSequenceNumber });
+        }
+        return { ...task, sequenceNumber: newSequenceNumber };
+    });
+    
+    newTasks[finishColId] = updatedFinishCol;
     setTasks(newTasks);
 
-    // Update backend
-    const res = await updateKanbanTaskStatus(movedTask.sheetRowIndex, finishColId);
-    if (!res.success) {
-        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task status.' });
-        await fetchData(); // Revert on failure
+    // Backend update
+    if (startColId !== finishColId) {
+        const statusUpdateResult = await updateKanbanTaskStatus(movedTask.sheetRowIndex, finishColId);
+        if (!statusUpdateResult.success) {
+            toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task status.' });
+            fetchData(); // Revert on failure
+            return;
+        }
     }
-  };
+    
+    if (sequenceUpdates.length > 0) {
+        const sequenceUpdateResult = await batchUpdateKanbanTaskSequence(sequenceUpdates);
+        if (!sequenceUpdateResult.success) {
+            toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task sequence.' });
+            fetchData(); // Revert on failure
+        }
+    }
+};
+
   
   const handleOpenDialog = (task: KanbanTask | null = null) => {
     setEditingTask(task);
     if (task) {
         setTaskForm({
             title: task.title,
-            description: task.description,
+            description: task.description || '',
             type: task.type,
             priority: task.priority,
             assignee: task.assignee,
-            dueDate: task.dueDate,
+            dueDate: task.dueDate || '',
             tags: task.tags
         });
     } else {
@@ -176,12 +204,10 @@ export default function KanbanPage() {
     if (editingTask) {
         result = await updateKanbanTask(editingTask.sheetRowIndex, {
             ...taskForm,
-            dueDate: taskForm.dueDate ? new Date(taskForm.dueDate).toISOString() : ''
         });
     } else {
         result = await addKanbanTask(projectId, {
             ...taskForm,
-            dueDate: taskForm.dueDate ? new Date(taskForm.dueDate).toISOString() : ''
         });
     }
     
