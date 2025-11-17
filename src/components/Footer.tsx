@@ -16,7 +16,7 @@ export default function Footer() {
               Automation Projects
             </Link>
             <Link href="https://meadow-lock-db7.notion.site/262f4f581e0d806796c1f9aa8fa0d6c9?v=262f4f581e0d809fbf2d000cfed8444c" target="_blank" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Automation Documentation
+              Automation Project Documentation
             </Link>
           
           </nav>
