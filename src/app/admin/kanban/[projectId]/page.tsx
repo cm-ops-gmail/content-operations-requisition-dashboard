@@ -112,7 +112,7 @@ export default function KanbanPage() {
   }, [projectId]);
 
     const onDragEnd = async (result: DropResult) => {
-    const { source, destination, draggableId } = result;
+    const { source, destination } = result;
 
     if (!destination) return;
 
@@ -129,18 +129,21 @@ export default function KanbanPage() {
 
     const [movedTask] = sourceCol.splice(source.index, 1);
     
-    // Optimistically update the UI
+    // Optimistically update the UI before backend calls
     setTasks(newTasksState);
+
+    let res;
 
     if (startColId === endColId) {
         // Reordering within the same column
         destCol.splice(destination.index, 0, movedTask);
+        
         const sequenceUpdates = destCol.map((task: KanbanTask, index: number) => ({
             sheetRowIndex: task.sheetRowIndex,
             sequenceNumber: index + 1
         }));
         
-        await batchUpdateKanbanTaskSequence(sequenceUpdates);
+        res = await batchUpdateKanbanTaskSequence(sequenceUpdates);
         
     } else {
         // Moving to a different column
@@ -157,12 +160,33 @@ export default function KanbanPage() {
             sequenceNumber: index + 1
         }));
         
-        await Promise.all([
+        res = await Promise.all([
             updateKanbanTaskStatus(movedTask.sheetRowIndex, endColId),
             batchUpdateKanbanTaskSequence([...sourceSequenceUpdates, ...destSequenceUpdates])
-        ]);
+        ]).then(results => ({ success: results.every(r => r.success) })); // Combine results
     }
-    await fetchData(); // Re-fetch to ensure data consistency
+
+    if (!res.success) {
+        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task. Reverting changes.' });
+        await fetchData(); // Re-fetch to ensure data consistency
+    } else {
+        toast({ title: 'Task Moved', description: 'The task position has been updated.'});
+        // Re-fetch data silently in the background to ensure consistency
+        // without a full loading spinner.
+        const taskData = await getKanbanTasks(projectId);
+        const categorizedTasks: Record<ColumnId, KanbanTask[]> = { todo: [], inprogress: [], review: [], done: [] };
+        taskData
+          .sort((a,b) => a.sequenceNumber - b.sequenceNumber)
+          .forEach(task => {
+              const status = task.status as ColumnId;
+              if (categorizedTasks[status]) {
+              categorizedTasks[status].push(task);
+              } else {
+                  categorizedTasks.todo.push(task);
+              }
+          });
+        setTasks(categorizedTasks);
+    }
   };
   
   const handleOpenDialog = (task: KanbanTask | null = null) => {
