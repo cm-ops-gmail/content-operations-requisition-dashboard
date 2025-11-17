@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Search, Circle, KanbanSquare } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { format, parseISO } from 'date-fns';
 
 interface ProjectDashboardClientProps {
     projects: string[][];
@@ -33,7 +35,24 @@ const StatusIndicator = ({ status }: { status: string }) => {
     );
 };
 
-const VISIBLE_COLUMNS = ['Project ID', 'Project Title', 'Status', 'Start Date', 'End Date'];
+const FormattedDate = ({ dateString }: { dateString: string }) => {
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+
+    if (!mounted || !dateString) {
+        return <span className="text-muted-foreground">N/A</span>;
+    }
+    
+    try {
+        const date = parseISO(dateString);
+        return <>{format(date, 'MMM d, yyyy')}</>;
+    } catch(e) {
+        return <>{dateString}</>;
+    }
+}
+
+
+const VISIBLE_COLUMNS = ['Project ID', 'Project Title', 'Status', 'Assignee', 'Start Date', 'End Date'];
 
 export function ProjectDashboardClient({ projects, headers }: ProjectDashboardClientProps) {
   const [statusFilter, setStatusFilter] = useState('all');
@@ -43,6 +62,9 @@ export function ProjectDashboardClient({ projects, headers }: ProjectDashboardCl
   const projectTitleIndex = headers.indexOf('Project Title');
   const statusIndex = headers.indexOf('Status');
   const kanbanInitializedIndex = headers.indexOf('Kanban Initialized');
+  const assigneeIndex = headers.indexOf('Assignee');
+  const startDateIndex = headers.indexOf('Start Date');
+  const endDateIndex = headers.indexOf('End Date');
 
   const visibleHeaders = useMemo(() => {
     return headers.filter(h => VISIBLE_COLUMNS.includes(h));
@@ -124,7 +146,10 @@ export function ProjectDashboardClient({ projects, headers }: ProjectDashboardCl
                              if (header === 'Status') {
                                 return <TableCell key={header}><StatusIndicator status={cell} /></TableCell>
                              }
-                             return <TableCell key={header}>{cell}</TableCell>
+                             if (header === 'Start Date' || header === 'End Date') {
+                                return <TableCell key={header}><FormattedDate dateString={cell} /></TableCell>
+                             }
+                             return <TableCell key={header}>{cell || <span className="text-muted-foreground">N/A</span>}</TableCell>
                           })}
                           <TableCell className="text-right">
                               {hasKanban && (
