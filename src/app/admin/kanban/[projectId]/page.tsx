@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getKanbanTasks, getMembers, addKanbanTask, updateKanbanTask, updateKanbanTaskStatus, deleteKanbanTask, batchUpdateKanbanTaskSequence } from '@/app/actions';
+import { getKanbanTasks, getMembers, addKanbanTask, updateKanbanTask, updateKanbanTaskStatus, deleteKanbanTask } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Search, Users, Calendar, Trash2, Edit } from 'lucide-react';
 import type { KanbanTask } from '@/lib/mock-data';
@@ -77,7 +77,7 @@ export default function KanbanPage() {
       const [taskData, memberData] = await Promise.all([getKanbanTasks(projectId), getMembers()]);
 
       const categorizedTasks: Record<ColumnId, KanbanTask[]> = { todo: [], inprogress: [], review: [], done: [] };
-      taskData.sort((a, b) => a.sequenceNumber - b.sequenceNumber).forEach(task => {
+      taskData.forEach(task => {
         const status = task.status as ColumnId;
         if (categorizedTasks[status]) {
           categorizedTasks[status].push(task);
@@ -111,98 +111,49 @@ export default function KanbanPage() {
 
     if (!destination) return;
 
+    if (source.droppableId === destination.droppableId && source.index === destination.index) {
+      return;
+    }
+
     const startColId = source.droppableId as ColumnId;
-    const endColId = destination.droppableId as ColumnId;
+    const finishColId = destination.droppableId as ColumnId;
+
+    const startCol = Array.from(tasks[startColId]);
+    const finishCol = startColId === finishColId ? startCol : Array.from(tasks[finishColId]);
     
-    // Create a deep copy of tasks to manipulate safely
-    const newTasksState = JSON.parse(JSON.stringify(tasks));
-    const sourceCol: KanbanTask[] = newTasksState[startColId];
-    const destCol: KanbanTask[] = newTasksState[endColId];
+    const movedTask = startCol.find(t => t.id === draggableId);
+    if (!movedTask) return;
+
+    // Optimistic UI update
+    startCol.splice(source.index, 1);
+    movedTask.status = finishColId;
+    finishCol.splice(destination.index, 0, movedTask);
     
-    const taskIndex = sourceCol.findIndex(t => t.id === draggableId);
-    if (taskIndex === -1) return;
+    const newTasks = {
+        ...tasks,
+        [startColId]: startCol,
+        [finishColId]: finishCol,
+    };
+    setTasks(newTasks);
 
-    // Remove task from source column
-    const [movedTask] = sourceCol.splice(taskIndex, 1);
-
-    if (startColId === endColId) {
-        // --- MOVE WITHIN THE SAME COLUMN ---
-        
-        // Add task to its new position in the same column
-        sourceCol.splice(destination.index, 0, movedTask);
-
-        // Update sequence numbers for the entire column
-        const updatedSequence = sourceCol.map((task, index) => ({
-            ...task,
-            sequenceNumber: index + 1
-        }));
-        
-        newTasksState[startColId] = updatedSequence;
-        setTasks(newTasksState); // Optimistic UI update
-
-        const sequenceUpdates = updatedSequence.map(task => ({
-            sheetRowIndex: task.sheetRowIndex,
-            sequenceNumber: task.sequenceNumber
-        }));
-
-        const res = await batchUpdateKanbanTaskSequence(sequenceUpdates);
-        if (!res.success) {
-            toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task sequence.' });
-            fetchData(); // Revert on failure
-        }
-    } else {
-        // --- MOVE TO A DIFFERENT COLUMN ---
-
-        // Update the task's status
-        movedTask.status = endColId;
-
-        // Add task to its new position in the destination column
-        destCol.splice(destination.index, 0, movedTask);
-        
-        // Recalculate sequence for both source and destination columns
-        const updatedSourceCol = sourceCol.map((task, index) => ({
-            ...task,
-            sequenceNumber: index + 1,
-        }));
-        const updatedDestCol = destCol.map((task, index) => ({
-            ...task,
-            sequenceNumber: index + 1,
-        }));
-
-        newTasksState[startColId] = updatedSourceCol;
-        newTasksState[endColId] = updatedDestCol;
-        setTasks(newTasksState); // Optimistic UI update
-
-        // Prepare backend updates
-        const sequenceUpdates = [
-            ...updatedSourceCol.map(t => ({ sheetRowIndex: t.sheetRowIndex, sequenceNumber: t.sequenceNumber })),
-            ...updatedDestCol.map(t => ({ sheetRowIndex: t.sheetRowIndex, sequenceNumber: t.sequenceNumber }))
-        ];
-
-        // Execute backend updates
-        const [statusUpdateResult, sequenceUpdateResult] = await Promise.all([
-            updateKanbanTaskStatus(movedTask.sheetRowIndex, endColId),
-            batchUpdateKanbanTaskSequence(sequenceUpdates)
-        ]);
-        
-        if (!statusUpdateResult.success || !sequenceUpdateResult.success) {
-            toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task.' });
-            fetchData(); // Revert on failure
-        }
+    // Update backend
+    const res = await updateKanbanTaskStatus(movedTask.sheetRowIndex, finishColId);
+    if (!res.success) {
+        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task status.' });
+        await fetchData(); // Revert on failure
     }
   };
-
   
   const handleOpenDialog = (task: KanbanTask | null = null) => {
     setEditingTask(task);
     if (task) {
         setTaskForm({
             title: task.title,
-            description: task.description || '',
+            description: task.description,
             type: task.type,
             priority: task.priority,
             assignee: task.assignee,
-            dueDate: task.dueDate || '',
+            dueDate: task.dueDate,
             tags: task.tags
         });
     } else {
@@ -225,10 +176,12 @@ export default function KanbanPage() {
     if (editingTask) {
         result = await updateKanbanTask(editingTask.sheetRowIndex, {
             ...taskForm,
+            dueDate: taskForm.dueDate ? new Date(taskForm.dueDate).toISOString() : ''
         });
     } else {
         result = await addKanbanTask(projectId, {
             ...taskForm,
+            dueDate: taskForm.dueDate ? new Date(taskForm.dueDate).toISOString() : ''
         });
     }
     
@@ -283,7 +236,7 @@ export default function KanbanPage() {
   });
 
   const totalTickets = Object.values(tasks).flat().length;
-  const canManage = user?.role === 'admin' || user?.role === 'sub-admin';
+  const canManage = !!user;
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
@@ -425,7 +378,7 @@ export default function KanbanPage() {
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="absolute top-2 left-2 h-6 w-6 flex items-center justify-center bg-muted-foreground/10 text-muted-foreground rounded-full text-xs font-bold">
-                                    {task.sequenceNumber || index + 1}
+                                    {index + 1}
                                 </div>
                                 <div className="flex items-center gap-2 mb-2 pl-8">
                                     <Badge variant="outline" className={getPriorityColor(task.priority)}>{task.priority}</Badge>
@@ -470,3 +423,5 @@ export default function KanbanPage() {
     </div>
   );
 }
+
+    
