@@ -87,7 +87,7 @@ export default function KanbanListPage() {
                     </TableCell>
                     <TableCell className="text-right">
                        <Button asChild>
-                         <Link href={`/admin/kanban/${row[projectIdIndex]}`}>
+                         <Link href={`/kanban/${row[projectIdIndex]}`}>
                            <KanbanSquare className="mr-2 h-4 w-4" />
                            View Board
                          </Link>
