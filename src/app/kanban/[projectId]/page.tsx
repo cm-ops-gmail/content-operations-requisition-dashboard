@@ -1,4 +1,3 @@
-
 'use client'
 
 import React, { useState, useEffect, type FormEvent } from 'react';
@@ -125,8 +124,8 @@ export default function KanbanPage() {
     
     const startColId = source.droppableId as ColumnId;
     const endColId = destination.droppableId as ColumnId;
-    const startCol = newTasksState[startColId];
-    const endCol = newTasksState[endColId];
+    const startCol: KanbanTask[] = newTasksState[startColId];
+    const endCol: KanbanTask[] = newTasksState[endColId];
 
     const movedTask = startCol.find((t: KanbanTask) => t.id === draggableId);
     if (!movedTask) return;
@@ -134,11 +133,6 @@ export default function KanbanPage() {
     // Remove from source column
     startCol.splice(source.index, 1);
     
-    // If moving to a different column, update status
-    if (startColId !== endColId) {
-      movedTask.status = endColId;
-    }
-
     // Add to destination column
     endCol.splice(destination.index, 0, movedTask);
 
@@ -147,7 +141,7 @@ export default function KanbanPage() {
 
     if (startColId === endColId) {
         // Same column move: update sequence
-        const sequenceUpdates = endCol.map((task: KanbanTask, index: number) => ({
+        const sequenceUpdates = endCol.map((task, index) => ({
             sheetRowIndex: task.sheetRowIndex,
             sequenceNumber: index + 1,
         }));
@@ -161,12 +155,13 @@ export default function KanbanPage() {
         }
     } else {
         // Different column move: update status and sequence for both columns
-        const startColUpdates = startCol.map((task: KanbanTask, index: number) => ({
+        movedTask.status = endColId;
+        const startColUpdates = startCol.map((task, index) => ({
             sheetRowIndex: task.sheetRowIndex,
             sequenceNumber: index + 1,
         }));
 
-        const endColUpdates = endCol.map((task: KanbanTask, index: number) => ({
+        const endColUpdates = endCol.map((task, index) => ({
             sheetRowIndex: task.sheetRowIndex,
             sequenceNumber: index + 1,
         }));
@@ -525,3 +520,4 @@ export default function KanbanPage() {
     </>
   );
 }
+    
