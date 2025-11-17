@@ -583,7 +583,7 @@ export async function addKanbanTask(
 
 export async function updateKanbanTask(
     sheetRowIndex: number,
-    taskData: Partial<Omit<KanbanTask, 'id' | 'sheetRowIndex' | 'projectId' | 'sequenceNumber'>>
+    taskData: Partial<Omit<KanbanTask, 'id' | 'sheetRowIndex' | 'projectId'>>
 ) {
     try {
         const kanbanSheetData = await getSheetData('KanbanTasks');
@@ -600,6 +600,8 @@ export async function updateKanbanTask(
             'Assignee': taskData.assignee,
             'Due Date': taskData.dueDate,
             'Tags': taskData.tags?.join(','),
+            'Sequence': taskData.sequenceNumber?.toString(),
+            'Status': taskData.status,
         };
 
         const updateRequests = Object.entries(dataToSave).map(([header, value]) => {
@@ -637,6 +639,52 @@ export async function updateKanbanTask(
 
     } catch (error) {
         console.error('Error updating task:', error);
+        if (error instanceof Error) return { success: false, error: error.message };
+        return { success: false, error: 'An unknown error occurred.' };
+    }
+}
+
+export async function batchUpdateKanbanTaskSequence(
+    updates: { sheetRowIndex: number; sequenceNumber: number }[]
+) {
+    if (updates.length === 0) {
+        return { success: true };
+    }
+    try {
+        const kanbanSheetId = await getSheetId('KanbanTasks');
+        const kanbanSheetData = await getSheetData('KanbanTasks');
+        if (!kanbanSheetData.values || kanbanSheetData.values.length === 0) {
+            return { success: false, error: 'No kanban data found to update.' };
+        }
+        const headers = kanbanSheetData.values[0];
+        const sequenceColIndex = headers.indexOf('Sequence');
+
+        if (sequenceColIndex === -1) {
+            return { success: false, error: 'Sequence column not found.' };
+        }
+
+        const requests = updates.map(({ sheetRowIndex, sequenceNumber }) => ({
+            updateCells: {
+                range: {
+                    sheetId: kanbanSheetId,
+                    startRowIndex: sheetRowIndex - 1,
+                    endRowIndex: sheetRowIndex,
+                    startColumnIndex: sequenceColIndex,
+                    endColumnIndex: sequenceColIndex + 1,
+                },
+                rows: [{
+                    values: [{
+                        userEnteredValue: { stringValue: sequenceNumber.toString() }
+                    }]
+                }],
+                fields: 'userEnteredValue.stringValue'
+            }
+        }));
+
+        return await batchUpdateSheet(requests);
+
+    } catch (error) {
+        console.error('Error batch updating sequence:', error);
         if (error instanceof Error) return { success: false, error: error.message };
         return { success: false, error: 'An unknown error occurred.' };
     }
@@ -827,3 +875,4 @@ export async function updateWorkTypeQuestion(newQuestion: string) {
     
 
     
+
