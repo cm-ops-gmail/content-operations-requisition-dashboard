@@ -11,16 +11,18 @@ import { useAuth } from '@/hooks/use-auth';
 export default function Header() {
   const { user, isMounted, logout } = useAuth();
   
-  const publicLinks = [
-    { href: '/', label: 'Home' },
+const publicLinks = [
+    { href: '/', label: 'Dashboard' },
+    { href: '/projects', label: 'Project Dashboard' },
   ];
 
-  const userLinks = [
+  const adminLinks = [
     { href: '/', label: 'Dashboard' },
+    { href: '/projects', label: 'Project Dashboard' },
     { href: '/admin', label: 'Admin Panel' },
   ];
 
-  const linksToShow = user ? userLinks : publicLinks;
+  const linksToShow = user ? adminLinks : publicLinks;
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
