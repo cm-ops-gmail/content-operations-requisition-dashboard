@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getKanbanTasks, getMembers, addKanbanTask, updateKanbanTask, batchUpdateKanbanTaskSequence, updateKanbanTaskStatus, deleteKanbanTask } from '@/app/actions';
+import { getKanbanTasks, getMembers, addKanbanTask, updateKanbanTask, updateKanbanTaskStatus, deleteKanbanTask } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Search, Users, Calendar, Trash2, Edit, Eye } from 'lucide-react';
 import type { KanbanTask } from '@/lib/mock-data';
@@ -112,7 +112,7 @@ export default function KanbanPage() {
   }, [projectId]);
 
     const onDragEnd = async (result: DropResult) => {
-    const { source, destination } = result;
+    const { source, destination, draggableId } = result;
 
     if (!destination) return;
 
@@ -120,72 +120,32 @@ export default function KanbanPage() {
       return;
     }
 
-    const newTasksState = JSON.parse(JSON.stringify(tasks));
     const startColId = source.droppableId as ColumnId;
-    const endColId = destination.droppableId as ColumnId;
+    const finishColId = destination.droppableId as ColumnId;
 
-    const sourceCol = newTasksState[startColId];
-    const destCol = newTasksState[endColId];
-
-    const [movedTask] = sourceCol.splice(source.index, 1);
+    const startCol = Array.from(tasks[startColId]);
+    const finishCol = startColId === finishColId ? startCol : Array.from(tasks[finishColId]);
     
-    // Optimistically update the UI before backend calls
-    setTasks(newTasksState);
+    const movedTask = startCol.find(t => t.id === draggableId);
+    if (!movedTask) return;
 
-    let res;
+    // Optimistic UI update
+    startCol.splice(source.index, 1);
+    movedTask.status = finishColId;
+    finishCol.splice(destination.index, 0, movedTask);
+    
+    const newTasks = {
+        ...tasks,
+        [startColId]: startCol,
+        [finishColId]: finishCol,
+    };
+    setTasks(newTasks);
 
-    if (startColId === endColId) {
-        // Reordering within the same column
-        destCol.splice(destination.index, 0, movedTask);
-        
-        const sequenceUpdates = destCol.map((task: KanbanTask, index: number) => ({
-            sheetRowIndex: task.sheetRowIndex,
-            sequenceNumber: index + 1
-        }));
-        
-        res = await batchUpdateKanbanTaskSequence(sequenceUpdates);
-        
-    } else {
-        // Moving to a different column
-        movedTask.status = endColId;
-        destCol.splice(destination.index, 0, movedTask);
-        
-        const sourceSequenceUpdates = sourceCol.map((task: KanbanTask, index: number) => ({
-            sheetRowIndex: task.sheetRowIndex,
-            sequenceNumber: index + 1
-        }));
-        
-        const destSequenceUpdates = destCol.map((task: KanbanTask, index: number) => ({
-            sheetRowIndex: task.sheetRowIndex,
-            sequenceNumber: index + 1
-        }));
-        
-        res = await Promise.all([
-            updateKanbanTaskStatus(movedTask.sheetRowIndex, endColId),
-            batchUpdateKanbanTaskSequence([...sourceSequenceUpdates, ...destSequenceUpdates])
-        ]).then(results => ({ success: results.every(r => r.success) })); // Combine results
-    }
-
+    // Update backend
+    const res = await updateKanbanTaskStatus(movedTask.sheetRowIndex, finishColId);
     if (!res.success) {
-        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task. Reverting changes.' });
-        await fetchData(); // Re-fetch to ensure data consistency
-    } else {
-        toast({ title: 'Task Moved', description: 'The task position has been updated.'});
-        // Re-fetch data silently in the background to ensure consistency
-        // without a full loading spinner.
-        const taskData = await getKanbanTasks(projectId);
-        const categorizedTasks: Record<ColumnId, KanbanTask[]> = { todo: [], inprogress: [], review: [], done: [] };
-        taskData
-          .sort((a,b) => a.sequenceNumber - b.sequenceNumber)
-          .forEach(task => {
-              const status = task.status as ColumnId;
-              if (categorizedTasks[status]) {
-              categorizedTasks[status].push(task);
-              } else {
-                  categorizedTasks.todo.push(task);
-              }
-          });
-        setTasks(categorizedTasks);
+        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not update task status.' });
+        await fetchData(); // Revert on failure
     }
   };
   
@@ -429,7 +389,7 @@ export default function KanbanPage() {
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                   <div className="absolute top-2 left-2 h-6 w-6 flex items-center justify-center bg-muted-foreground/10 text-muted-foreground rounded-full text-xs font-bold">
-                                      {task.sequenceNumber}
+                                      {index + 1}
                                   </div>
                                   <div className="flex items-center gap-2 mb-2 pl-8">
                                       <Badge variant="outline" className={getPriorityColor(task.priority)}>{task.priority}</Badge>
