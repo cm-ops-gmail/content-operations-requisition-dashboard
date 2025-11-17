@@ -377,7 +377,7 @@ export default function ProjectsPage() {
                                 <TableCell key={cellIndex}>
                                     {cell === 'Yes' ? (
                                         <Button asChild variant="secondary">
-                                            <Link href={`/admin/kanban/${projectId}`}>
+                                            <Link href={`/kanban/${projectId}`}>
                                                <Check className="mr-2" /> View Kanban
                                             </Link>
                                         </Button>
