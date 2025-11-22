@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getAllTickets, createProjectFromTicket, updateTicketStatus, getProjects } from '@/app/actions';
-import { Loader2, FolderPlus, Calendar as CalendarIcon, Eye, Circle, Search, CheckCircle2, Archive, ThumbsUp, Clock, Hourglass, LoaderCircle } from 'lucide-react';
+import { getAllTickets, createProjectFromTicket, updateTicket, getProjects, getMembers } from '@/app/actions';
+import { Loader2, FolderPlus, Calendar as CalendarIcon, Eye, Circle, Search, CheckCircle2, Archive, ThumbsUp, Clock, Hourglass, LoaderCircle, User } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -65,6 +65,7 @@ const VISIBLE_COLUMNS = [
   'Work Type',
   'Product/Course/Requisition Name',
   'Your Email*',
+  'Assignee'
 ];
 
 const statusMessages: Record<string, { message: string, icon: React.ReactNode, color: string }> = {
@@ -97,6 +98,7 @@ export default function AllTicketsPage() {
   const { user } = useAuth();
   const [tickets, setTickets] = useState<string[][]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
+  const [members, setMembers] = useState<string[][]>([]);
   const [existingProjectTicketIds, setExistingProjectTicketIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -117,7 +119,11 @@ export default function AllTicketsPage() {
     setIsLoading(true);
     setError('');
     try {
-      const [ticketData, projectData] = await Promise.all([getAllTickets(), getProjects()]);
+      const [ticketData, projectData, memberData] = await Promise.all([
+          getAllTickets(), 
+          getProjects(),
+          getMembers(),
+        ]);
 
       if (ticketData && ticketData.values && ticketData.values.length > 0) {
         setHeaders(ticketData.values[0]);
@@ -134,6 +140,10 @@ export default function AllTicketsPage() {
             const ids = new Set(projectData.values.slice(1).map(p => p[ticketIdColIndex]).filter(Boolean));
             setExistingProjectTicketIds(ids);
         }
+      }
+      
+      if (memberData && memberData.values && memberData.values.length > 0) {
+        setMembers(memberData.values.slice(1));
       }
 
     } catch (err) {
@@ -183,20 +193,15 @@ export default function AllTicketsPage() {
     setIsSubmitting(false);
   }
 
-  const handleStatusChange = async (rowIndex: number, newStatus: string) => {
+  const handleUpdateTicketField = async (rowIndex: number, field: string, value: string) => {
     const originalIndex = tickets.length - 1 - rowIndex;
     const sheetRowIndex = originalIndex + 1;
-    const result = await updateTicketStatus(sheetRowIndex, newStatus);
+    const result = await updateTicket(sheetRowIndex, { [field]: value });
     if (result.success) {
-        toast({ title: "Status Updated", description: "Ticket status has been saved." });
-        const newTickets = [...tickets];
-        const statusIndex = headers.indexOf("Status");
-        if (statusIndex !== -1) {
-            newTickets[rowIndex][statusIndex] = newStatus;
-            setTickets(newTickets);
-        }
+        toast({ title: "Ticket Updated", description: `Ticket ${field} has been saved.` });
+        await fetchTickets();
     } else {
-        toast({ variant: "destructive", title: "Error", description: result.error || "Failed to update status." });
+        toast({ variant: "destructive", title: "Error", description: result.error || `Failed to update ${field}.` });
     }
   };
   
@@ -221,6 +226,7 @@ export default function AllTicketsPage() {
   const workTypeIndex = headers.indexOf('Work Type');
   const createdDateIndex = headers.indexOf('Created Date');
   const ticketIdIndex = headers.indexOf('Ticket ID');
+  const assigneeIndex = headers.indexOf('Assignee');
 
 
   const filteredTickets = tickets.filter(row => {
@@ -244,7 +250,7 @@ export default function AllTicketsPage() {
     }
   });
   
-  const visibleHeaders = headers.filter(h => VISIBLE_COLUMNS.includes(h) || h === 'Status' || h === 'Created Date');
+  const visibleHeaders = headers.filter(h => VISIBLE_COLUMNS.includes(h) || h === 'Status' || h === 'Created Date' || h === 'Assignee');
 
 
   const DatePicker = ({ date, setDate, placeholder }: { date?: Date; setDate: (date?: Date) => void; placeholder: string; }) => (
@@ -399,7 +405,7 @@ export default function AllTicketsPage() {
                                             <TableCell key={header}>
                                                 <Select
                                                     defaultValue={cell === 'Open' ? 'In Review' : cell}
-                                                    onValueChange={(newStatus) => handleStatusChange(tickets.indexOf(row), newStatus)}
+                                                    onValueChange={(newStatus) => handleUpdateTicketField(tickets.indexOf(row), 'Status', newStatus)}
                                                     disabled={!isLoggedIn}
                                                 >
                                                     <SelectTrigger className="w-[150px]">
@@ -422,6 +428,27 @@ export default function AllTicketsPage() {
                                      }
                                      if (cellIndex === createdDateIndex) {
                                         return <TableCell key={header}><ClientDate dateString={cell} /></TableCell>
+                                     }
+                                     if (cellIndex === assigneeIndex) {
+                                        return (
+                                            <TableCell key={header}>
+                                                <Select
+                                                    onValueChange={(value) => handleUpdateTicketField(tickets.indexOf(row), 'Assignee', value)}
+                                                    defaultValue={cell}
+                                                    disabled={!canManageProjects}
+                                                >
+                                                    <SelectTrigger className="w-[180px]">
+                                                        <User className="mr-2 h-4 w-4" />
+                                                        <SelectValue placeholder="Assign a member" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {members.map((member, i) => (
+                                                            <SelectItem key={i} value={member[0]}>{member[0]} ({member[1]})</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </TableCell>
+                                        )
                                      }
                                     return <TableCell key={header}>{cell === 'Open' ? 'In Review' : cell}</TableCell>
                                 })}
