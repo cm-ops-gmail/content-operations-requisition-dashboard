@@ -1,4 +1,5 @@
 
+
 "use server";
 
 import { intelligentTicketRouting, type IntelligentTicketRoutingInput } from '@/ai/flows/intelligent-ticket-routing';
@@ -57,7 +58,8 @@ export async function submitTicket(data: Record<string, any>) {
         ...data,
         'Ticket ID': `TICKET-${Date.now()}`,
         'Created Date': formattedBstDate,
-        'Status': 'In Review'
+        'Status': 'In Review',
+        'Assignee': ''
     };
     return await appendRow(dataWithTimestamp, 'Tickets');
 }
@@ -243,42 +245,63 @@ export async function getAllTickets() {
     return await getSheetData('Tickets');
 }
 
-export async function updateTicketStatus(rowIndex: number, newStatus: string) {
-     try {
+export async function updateTicket(rowIndex: number, newValues: { [key: string]: string }) {
+    try {
         const ticketSheetData = await getSheetData('Tickets');
         if (!ticketSheetData.values || ticketSheetData.values.length === 0) {
-            return { success: false, error: 'No ticket data found to update.' };
+            return { success: false, error: 'No tickets found to update.' };
         }
         const headers = ticketSheetData.values[0];
-        const statusColIndex = headers.indexOf('Status');
-         if (statusColIndex === -1) {
-             return { success: false, error: 'Status column not found in Tickets.' };
-         }
-         
+        const originalRow = ticketSheetData.values[rowIndex];
+        if (!originalRow) {
+            return { success: false, error: 'Ticket row not found.' };
+        }
+
+        const updatedRow = [...originalRow];
+        
+        const updateRequests: any[] = [];
         const ticketSheetId = await getSheetId('Tickets');
 
-        const updateRequest = {
-            updateCells: {
-                range: {
-                    sheetId: ticketSheetId,
-                    startRowIndex: rowIndex, // This is now the correct sheet row index
-                    endRowIndex: rowIndex + 1,
-                    startColumnIndex: statusColIndex,
-                    endColumnIndex: statusColIndex + 1,
-                },
-                rows: [ { values: [{ userEnteredValue: { stringValue: newStatus } }] } ],
-                fields: 'userEnteredValue'
+        for (const [header, value] of Object.entries(newValues)) {
+            let colIndex = headers.indexOf(header);
+            
+            if (colIndex === -1) {
+                // If header doesn't exist, add it as a new column
+                await addColumn(header, 'Tickets');
+                const refreshedData = await getSheetData('Tickets');
+                headers.push(header);
+                colIndex = headers.length - 1;
             }
-        };
+
+            if (colIndex !== -1) {
+                updatedRow[colIndex] = value;
+                 updateRequests.push({
+                    updateCells: {
+                        range: {
+                            sheetId: ticketSheetId,
+                            startRowIndex: rowIndex,
+                            endRowIndex: rowIndex + 1,
+                            startColumnIndex: colIndex,
+                            endColumnIndex: colIndex + 1,
+                        },
+                        rows: [{ values: [{ userEnteredValue: { stringValue: value } }] }],
+                        fields: 'userEnteredValue'
+                    }
+                });
+            }
+        }
         
-        return await batchUpdateSheet([updateRequest]);
+        if (updateRequests.length === 0) {
+            return { success: true }; // No updates were needed
+        }
+        
+        return await batchUpdateSheet(updateRequests);
     } catch (error) {
-        console.error('Error updating ticket status:', error);
+        console.error('Error updating ticket:', error);
         if (error instanceof Error) return { success: false, error: error.message };
         return { success: false, error: 'An unknown error occurred.' };
     }
 }
-
 
 export async function getMembers() {
     return await getSheetData('Members');
@@ -373,7 +396,7 @@ export async function createProjectFromTicket(ticketRow: { rowIndex: number, val
         await appendRow(projectData, 'Projects');
 
         // Instead of deleting, update the status of the ticket
-        await updateTicketStatus(ticketRow.rowIndex, 'Completed');
+        await updateTicket(ticketRow.rowIndex, { 'Status': 'Completed' });
 
         return { success: true };
 
@@ -865,14 +888,3 @@ export async function updateWorkTypeQuestion(newQuestion: string) {
         return { success: false, error: 'An unknown error occurred.' };
     }
 }
-
-    
-
-    
-
-    
-
-    
-
-    
-
