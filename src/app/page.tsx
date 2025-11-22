@@ -1,5 +1,5 @@
 
-import { getAllTickets, getWorkTypes, getTeams } from './actions';
+import { getAllTickets, getWorkTypes, getTeams } from '@/app/actions';
 import { DashboardClient } from '@/components/DashboardClient';
 import { unstable_noStore as noStore } from 'next/cache';
 import React from 'react';
