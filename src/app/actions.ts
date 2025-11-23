@@ -48,10 +48,10 @@ export async function submitTicket(data: Record<string, any>) {
     // Manually format the date to 'YYYY-MM-DD HH:MM:SS'
     const year = bstDate.getUTCFullYear();
     const month = (bstDate.getUTCMonth() + 1).toString().padStart(2, '0');
-    const day = bstDate.getUTCDate().toString().padStart(2, '0');
-    const hours = bstDate.getUTCHours().toString().padStart(2, '0');
-    const minutes = bstDate.getUTCMinutes().toString().padStart(2, '0');
-    const seconds = bstDate.getUTCSeconds().toString().padStart(2, '0');
+    const day = bstDate.getUTCDate()).toString().padStart(2, '0');
+    const hours = (bstDate.getUTCHours()).toString().padStart(2, '0');
+    const minutes = (bstDate.getUTCMinutes()).toString().padStart(2, '0');
+    const seconds = (bstDate.getUTCSeconds()).toString().padStart(2, '0');
     const formattedBstDate = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 
     const dataWithTimestamp = {
@@ -252,12 +252,6 @@ export async function updateTicket(rowIndex: number, newValues: { [key: string]:
             return { success: false, error: 'No tickets found to update.' };
         }
         const headers = ticketSheetData.values[0];
-        const originalRow = ticketSheetData.values[rowIndex];
-        if (!originalRow) {
-            return { success: false, error: 'Ticket row not found.' };
-        }
-
-        const updatedRow = [...originalRow];
         
         const updateRequests: any[] = [];
         const ticketSheetId = await getSheetId('Tickets');
@@ -269,17 +263,20 @@ export async function updateTicket(rowIndex: number, newValues: { [key: string]:
                 // If header doesn't exist, add it as a new column
                 await addColumn(header, 'Tickets');
                 const refreshedData = await getSheetData('Tickets');
-                headers.push(header);
-                colIndex = headers.length - 1;
+                const refreshedHeaders = refreshedData.values?.[0] || [];
+                colIndex = refreshedHeaders.indexOf(header);
+                if (colIndex === -1) {
+                    console.warn(`Could not find or create column ${header}`);
+                    continue;
+                }
             }
 
             if (colIndex !== -1) {
-                updatedRow[colIndex] = value;
                  updateRequests.push({
                     updateCells: {
                         range: {
                             sheetId: ticketSheetId,
-                            startRowIndex: rowIndex,
+                            startRowIndex: rowIndex, 
                             endRowIndex: rowIndex + 1,
                             startColumnIndex: colIndex,
                             endColumnIndex: colIndex + 1,
@@ -395,7 +392,7 @@ export async function createProjectFromTicket(ticketRow: { rowIndex: number, val
         
         await appendRow(projectData, 'Projects');
 
-        // Instead of deleting, update the status of the ticket
+        // Update the status of the ticket to 'Completed' using the correct row index
         await updateTicket(ticketRow.rowIndex, { 'Status': 'Completed' });
 
         return { success: true };
@@ -457,41 +454,32 @@ export async function updateProject(rowIndex: number, newValues: { [key: string]
             return { success: false, error: 'No projects found to update.' };
         }
         const headers = projectSheetData.values[0];
-        const originalRow = projectSheetData.values[rowIndex];
-        if (!originalRow) {
-            return { success: false, error: 'Project row not found.' };
-        }
-
-        const updatedRow = [...originalRow];
-        
-        Object.entries(newValues).forEach(([header, value]) => {
-            const colIndex = headers.indexOf(header);
-            if (colIndex !== -1) {
-                updatedRow[colIndex] = value;
-            }
-        });
         
         const projectSheetId = await getSheetId('Projects');
 
-        const updateRequest = {
-            updateCells: {
-                range: {
-                    sheetId: projectSheetId,
-                    startRowIndex: rowIndex,
-                    endRowIndex: rowIndex + 1,
-                    startColumnIndex: 0,
-                    endColumnIndex: headers.length,
-                },
-                rows: [
-                    {
-                        values: updatedRow.map(val => ({ userEnteredValue: { stringValue: val } }))
-                    }
-                ],
-                fields: 'userEnteredValue'
-            }
-        };
+        const updateRequests = Object.entries(newValues).map(([header, value]) => {
+            const colIndex = headers.indexOf(header);
+            if (colIndex === -1) return null; // Should not happen if columns are managed properly
+            return {
+                updateCells: {
+                    range: {
+                        sheetId: projectSheetId,
+                        startRowIndex: rowIndex,
+                        endRowIndex: rowIndex + 1,
+                        startColumnIndex: colIndex,
+                        endColumnIndex: colIndex + 1,
+                    },
+                    rows: [{ values: [{ userEnteredValue: { stringValue: value } }] }],
+                    fields: 'userEnteredValue'
+                }
+            };
+        }).filter(Boolean);
         
-        return await batchUpdateSheet([updateRequest]);
+        if (updateRequests.length === 0) {
+            return { success: true };
+        }
+
+        return await batchUpdateSheet(updateRequests as any[]);
     } catch (error) {
         console.error('Error updating project:', error);
         if (error instanceof Error) return { success: false, error: error.message };
@@ -505,7 +493,7 @@ export async function initializeKanban(rowIndex: number, projectId: string) {
         const kanbanSheetData = await getSheetData('KanbanTasks');
         if (!kanbanSheetData.values || kanbanSheetData.values.length === 0) {
             const headers = ['Project ID', 'Sequence', 'Task ID', 'Title', 'Status', 'Assignee', 'Due Date', 'Description', 'Type', 'Priority', 'Tags'];
-            await appendRow(headers.reduce((acc, h) => ({...acc, [h]: ''}), {}), 'KanbanTasks');
+            await appendRow(headers.reduce((acc, h) => ({...acc, [h]: h}), {}), 'KanbanTasks');
         }
         
         await appendRow({
@@ -522,7 +510,7 @@ export async function initializeKanban(rowIndex: number, projectId: string) {
             'Tags': 'kickoff,planning'
         }, 'KanbanTasks');
 
-        return await updateProject(rowIndex + 1, { 'Kanban Initialized': 'Yes' });
+        return await updateProject(rowIndex, { 'Kanban Initialized': 'Yes' });
 
     } catch (error) {
         console.error('Error initializing Kanban:', error);
@@ -888,3 +876,193 @@ export async function updateWorkTypeQuestion(newQuestion: string) {
         return { success: false, error: 'An unknown error occurred.' };
     }
 }
+
+function tryParseDate(dateString: string): string {
+    if (!dateString) return '';
+    try {
+        // Handles 'YYYY-MM-DD HH:MM:SS' and ISO strings
+        const isoString = dateString.includes('T') ? dateString : dateString.replace(' ', 'T') + 'Z';
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) {
+            // Attempt to parse other common formats if needed, e.g., 'MM/DD/YYYY'
+            const maybeDate = new Date(dateString);
+            if(isNaN(maybeDate.getTime())) return '';
+            return maybeDate.toISOString();
+        }
+        return date.toISOString();
+    } catch {
+        return '';
+    }
+}
+
+export async function getMyAssignedTasks(assigneeName: string): Promise<Array<{
+    id: string;
+    title: string;
+    status: string;
+    source: 'Ticket' | 'Project' | 'Kanban Task';
+    sheetRowIndex: number;
+    date: string;
+}>> {
+    if (!assigneeName) return [];
+
+    try {
+        const [ticketData, projectData, kanbanData] = await Promise.all([
+            getSheetData('Tickets'),
+            getSheetData('Projects'),
+            getSheetData('KanbanTasks'),
+        ]);
+
+        const assignedTasks: any[] = [];
+        const lowerCaseAssigneeName = assigneeName.toLowerCase();
+
+        // Process Tickets
+        if (ticketData.values && ticketData.values.length > 0) {
+            const ticketHeaders = ticketData.values[0];
+            const assigneeIndex = ticketHeaders.indexOf('Assignee');
+            const ticketIdIndex = ticketHeaders.indexOf('Ticket ID');
+            const statusIndex = ticketHeaders.indexOf('Status');
+            const titleIndex = ticketHeaders.indexOf('Product/Course/Requisition Name');
+            const dateIndex = ticketHeaders.indexOf('Created Date');
+
+            if (assigneeIndex !== -1) {
+                ticketData.values.slice(1).forEach((row, index) => {
+                    if (row[assigneeIndex]?.toLowerCase() === lowerCaseAssigneeName) {
+                        assignedTasks.push({
+                            id: row[ticketIdIndex] || `ticket-${index}`,
+                            title: `${row[titleIndex] || 'Untitled Ticket'} / ${row[ticketIdIndex]}`,
+                            status: row[statusIndex] || 'In Review',
+                            source: 'Ticket',
+                            sheetRowIndex: index + 2,
+                            date: tryParseDate(row[dateIndex]),
+                        });
+                    }
+                });
+            }
+        }
+
+        // Process Projects
+        if (projectData.values && projectData.values.length > 0) {
+            const projectHeaders = projectData.values[0];
+            const assigneeIndex = projectHeaders.indexOf('Assignee');
+            const projectIdIndex = projectHeaders.indexOf('Project ID');
+            const statusIndex = projectHeaders.indexOf('Status');
+            const titleIndex = projectHeaders.indexOf('Project Title');
+            const dateIndex = projectHeaders.indexOf('Start Date');
+
+
+            if (assigneeIndex !== -1) {
+                projectData.values.slice(1).forEach((row, index) => {
+                    if (row[assigneeIndex]?.toLowerCase() === lowerCaseAssigneeName) {
+                        assignedTasks.push({
+                            id: row[projectIdIndex] || `project-${index}`,
+                            title: `${row[titleIndex] || 'Untitled Project'} / ${row[projectIdIndex]}`,
+                            status: row[statusIndex] || 'In Review',
+                            source: 'Project',
+                            sheetRowIndex: index + 2,
+                            date: tryParseDate(row[dateIndex]),
+                        });
+                    }
+                });
+            }
+        }
+        
+        // Process Kanban Tasks
+        if (kanbanData.values && kanbanData.values.length > 0) {
+            const kanbanHeaders = kanbanData.values[0];
+            const assigneeIndex = kanbanHeaders.indexOf('Assignee');
+            const taskIdIndex = kanbanHeaders.indexOf('Task ID');
+            const statusIndex = kanbanHeaders.indexOf('Status');
+            const titleIndex = kanbanHeaders.indexOf('Title');
+            const projectIdIndex = kanbanHeaders.indexOf('Project ID');
+            const dateIndex = kanbanHeaders.indexOf('Due Date');
+
+            if (assigneeIndex !== -1) {
+                kanbanData.values.slice(1).forEach((row, index) => {
+                    if (row[assigneeIndex]?.toLowerCase() === lowerCaseAssigneeName) {
+                        assignedTasks.push({
+                            id: row[taskIdIndex] || `kanban-${index}`,
+                            title: `${row[titleIndex] || 'Untitled Task'} / ${row[projectIdIndex]}`,
+                            status: row[statusIndex] || 'todo',
+                            source: 'Kanban Task',
+                            sheetRowIndex: index + 2,
+                            date: tryParseDate(row[dateIndex]),
+                        });
+                    }
+                });
+            }
+        }
+
+        return assignedTasks;
+    } catch (error) {
+        console.error('Error fetching assigned tasks:', error);
+        return [];
+    }
+}
+
+export async function updateMyTaskStatus(taskInfo: {
+    source: 'Ticket' | 'Project' | 'Kanban Task';
+    sheetRowIndex: number;
+    newStatus: string;
+}) {
+    const { source, sheetRowIndex, newStatus } = taskInfo;
+    let sheetName: string;
+
+    switch (source) {
+        case 'Ticket':
+            sheetName = 'Tickets';
+            break;
+        case 'Project':
+            sheetName = 'Projects';
+            break;
+        case 'Kanban Task':
+            sheetName = 'KanbanTasks';
+            break;
+        default:
+            return { success: false, error: 'Invalid task source.' };
+    }
+
+    try {
+        const sheetData = await getSheetData(sheetName);
+        if (!sheetData.values || sheetData.values.length === 0) {
+            return { success: false, error: `Sheet "${sheetName}" not found or is empty.` };
+        }
+        const headers = sheetData.values[0];
+        const statusColIndex = headers.indexOf('Status');
+
+        if (statusColIndex === -1) {
+            await addColumn('Status', sheetName);
+             const refreshedData = await getSheetData(sheetName);
+             const refreshedHeaders = refreshedData.values?.[0] || [];
+             const newStatusColIndex = refreshedHeaders.indexOf('Status');
+              if (newStatusColIndex === -1) {
+                return { success: false, error: `Failed to create and find Status column in "${sheetName}".` };
+             }
+             return updateMyTaskStatus(taskInfo); // Retry with the new column
+        }
+
+        const sheetId = await getSheetId(sheetName);
+        const updateRequest = {
+            updateCells: {
+                range: {
+                    sheetId,
+                    startRowIndex: sheetRowIndex - 1, // API is 0-indexed
+                    endRowIndex: sheetRowIndex,
+                    startColumnIndex: statusColIndex,
+                    endColumnIndex: statusColIndex + 1,
+                },
+                rows: [{ values: [{ userEnteredValue: { stringValue: newStatus } }] }],
+                fields: 'userEnteredValue',
+            },
+        };
+
+        return await batchUpdateSheet([updateRequest]);
+    } catch (error) {
+        console.error(`Error updating task status in ${source}:`, error);
+        if (error instanceof Error) return { success: false, error: error.message };
+        return { success: false, error: 'An unknown error occurred.' };
+    }
+}
+
+    
+
+    
