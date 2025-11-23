@@ -16,14 +16,17 @@ const publicLinks = [
     { href: '/projects', label: 'Project Dashboard' },
   ];
 
-  const adminLinks = [
+  const memberLinks = [
     { href: '/', label: 'Dashboard' },
+    { href: '/my-tasks', label: 'My Tasks' },
     { href: '/projects', label: 'Project Dashboard' },
+    ];
+  const adminLinks = [
+    ...memberLinks,
     { href: '/admin', label: 'Admin Panel' },
   ];
 
-  const linksToShow = user ? adminLinks : publicLinks;
-
+  const linksToShow = user ? (user.role === 'member' ? memberLinks : adminLinks) : publicLinks;
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
