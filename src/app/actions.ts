@@ -48,7 +48,7 @@ export async function submitTicket(data: Record<string, any>) {
     // Manually format the date to 'YYYY-MM-DD HH:MM:SS'
     const year = bstDate.getUTCFullYear();
     const month = (bstDate.getUTCMonth() + 1).toString().padStart(2, '0');
-    const day = bstDate.getUTCDate()).toString().padStart(2, '0');
+    const day = bstDate.getUTCDate().toString().padStart(2, '0');
     const hours = (bstDate.getUTCHours()).toString().padStart(2, '0');
     const minutes = (bstDate.getUTCMinutes()).toString().padStart(2, '0');
     const seconds = (bstDate.getUTCSeconds()).toString().padStart(2, '0');
