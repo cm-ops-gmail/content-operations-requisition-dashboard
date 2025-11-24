@@ -175,7 +175,7 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
   }), [tickets, searchQuery, fromDate, toDate, statusFilter, teamFilter, workTypeFilter, ticketIdIndex, headers, createdDateIndex, statusIndex, teamIndex, workTypeIndex]);
 
   const stats = useMemo(() => {
-    return filteredTickets.reduce((acc, ticket) => {
+    const statusCounts = filteredTickets.reduce((acc, ticket) => {
         const status = statusIndex !== -1 ? ticket[statusIndex] : '';
         if (status === 'In Review' || status === 'Open') acc.inReview++;
         if (status === 'In Progress') acc.inProgress++;
@@ -192,6 +192,7 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
         delivered: 0,
         completed: 0,
     });
+    return { ...statusCounts, total: filteredTickets.length };
   }, [filteredTickets, statusIndex]);
   
   const handleClearFilters = () => {
@@ -220,7 +221,8 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
 
   const isAnyFilterActive = searchQuery || fromDate || toDate || statusFilter !== 'All' || teamFilter !== 'All' || workTypeFilter !== 'All';
 
-  const statsCards = [
+  const totalTicketsCard = { title: 'Total Tickets', value: stats.total.toString(), icon: <Ticket className="h-8 w-8 text-primary" />, color: "text-primary" };
+  const otherStatsCards = [
     { title: 'In Review', value: stats.inReview.toString(), icon: <Eye className="h-8 w-8 text-yellow-500" />, color: "text-yellow-500" },
     { title: 'In Progress', value: stats.inProgress.toString(), icon: <LoaderCircle className="h-8 w-8 text-blue-500" />, color: "text-blue-500" },
     { title: 'Prioritized', value: stats.prioritized.toString(), icon: <Archive className="h-8 w-8 text-orange-500" />, color: "text-orange-500" },
@@ -258,8 +260,26 @@ export function DashboardClient({ tickets, headers, teams, statuses, workTypes }
     <>
       <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {statsCards.map((stat) => (
+      <div className="mb-8 flex justify-center">
+        <div className="w-full max-w-sm">
+          <Card className="rounded-xl transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-6">
+              <div className="space-y-1">
+                <CardTitle className="text-base font-medium text-muted-foreground">{totalTicketsCard.title}</CardTitle>
+                <div className={`text-4xl font-bold transition-colors duration-300 ${totalTicketsCard.color}`}>
+                  {totalTicketsCard.value}
+                </div>
+              </div>
+              <div className="p-3 bg-muted/50 rounded-lg">
+                {totalTicketsCard.icon}
+              </div>
+            </CardHeader>
+          </Card>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6 mb-8">
+        {otherStatsCards.map((stat) => (
             <Card key={stat.title} className="rounded-xl transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 p-6">
                     <div className="space-y-1">
